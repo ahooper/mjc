@@ -193,7 +193,7 @@ statement
     |   'return' expression? ';'					# returnStatement
     |   ';'											# emnptyStatement
     |   statementExpression ';'						# expressionStatement
-    |   Identifier ':' statement					# returnStatement
+    |   Identifier ':' statement					# labelStatement
     ;
 
 parExpression

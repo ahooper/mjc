@@ -83,7 +83,6 @@ public class Compiler {
         parser.removeErrorListeners(); // remove ConsoleErrorListener
         parser.addErrorListener(new UnderlineErrorListener());
         parser.setBuildParseTree(true);
-        //TODO Can the definitionPass listener be run during the parse, instead of after?
         ParseTree tree = parser.compilationUnit();
         // show tree in text form
         //System.out.println(tree.toStringTree(parser));
@@ -91,6 +90,8 @@ public class Compiler {
         ParseTreeWalker walker = new ParseTreeWalker();
         DefinitionPass def = new DefinitionPass();
         walker.walk(def, tree);
+        ReferencePass ref = new ReferencePass(def.scopes, def.globals);
+        walker.walk(ref, tree);
 /*
         EmitVisit visitor = new EmitVisit();
         visitor.visit(tree);
