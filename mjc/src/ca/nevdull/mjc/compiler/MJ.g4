@@ -231,14 +231,18 @@ expression
     |   expression '|' expression					# orExpression
     |   expression '&&' expression					# condAndExpression
     |   expression '||' expression					# condOrExpression
+    |   <assoc=right> expression
+        (   '='
+        )
+        expression									# assignExpression
     ;
 
 primary
-    :   '(' expression ')'
-    |   'this'
-    |   'super'
-    |   literal
-    |   Identifier
+    :   '(' expression ')'							# parenPrimary
+    |   'this'										# thisPrimary
+    |   'super'										# superPrimary
+    |   literal										# literalPrimary
+    |   Identifier									# identifierPrimary
     ;
 
 creator
@@ -668,7 +672,7 @@ ELLIPSIS : '...';
 // Whitespace and comments
 //
 
-WS  :  [ \t\r\n\u000C]+ -> skip
+WHITE_SPACE  :  [ \t\r\n\u000C]+ -> skip
     ;
 
 COMMENT

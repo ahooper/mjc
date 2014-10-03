@@ -43,18 +43,21 @@ public class Compiler {
 	        String[] lines = input.split("\n");
 	        String errorLine = lines[line - 1];
 	        System.err.println(errorLine);
-	        for (int i=0; i<charPositionInLine; i++) System.err.print(" ");
+	        for (int i=0; i<charPositionInLine; i++) {
+	        	if (errorLine.charAt(i) == '\t') System.err.print('\t');
+	        	else System.err.print(' ');
+	        }
 	        int start = offendingToken.getStartIndex();
 	        int stop = offendingToken.getStopIndex();
 	        if ( start>=0 && stop>=0 ) {
-	            for (int i=start; i<=stop; i++) System.err.print("^");
+	            for (int i=start; i<=stop; i++) System.err.print('^');
 	        }
 	        System.err.println();
 	    }
 	}
 	
     public static void error(Token t, String msg) {
-        System.err.printf("line %d:%d %s\n", t.getLine(), t.getCharPositionInLine(),
+        System.err.printf("line %d@%d %s\n", t.getLine(), t.getCharPositionInLine(),
                           msg);
     }
 

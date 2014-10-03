@@ -4,6 +4,8 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.misc.NotNull;
 import org.antlr.v4.runtime.tree.ParseTreeProperty;
 
+import ca.nevdull.mjc.compiler.MJParser.ConstructorDeclarationContext;
+
 public class DefinitionPass extends MJBaseListener {
     ParseTreeProperty<Scope> scopes = new ParseTreeProperty<Scope>();
     GlobalScope globals;
@@ -43,6 +45,19 @@ public class DefinitionPass extends MJBaseListener {
 	@Override 
 	public void exitClassDeclaration(@NotNull MJParser.ClassDeclarationContext ctx) {
         popScope();
+	}
+
+	@Override
+	public void enterConstructorDeclaration(ConstructorDeclarationContext ctx) {
+		MethodSymbol method = new MethodSymbol(ctx.Identifier().getSymbol(), currentScope);
+		currentScope.define(method);
+        currentScope = method;
+        saveScope(ctx, currentScope);					
+	}
+
+	@Override
+	public void exitConstructorDeclaration(ConstructorDeclarationContext ctx) {
+        popScope();  // formal parameters
 	}
 
 	@Override
