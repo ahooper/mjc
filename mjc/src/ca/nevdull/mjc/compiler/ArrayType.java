@@ -11,5 +11,8 @@ public class ArrayType extends Type {
 		this.elementType = elementType;
 	}
 	
+	public String toString() {
+		return elementType.toString()+"[]";
+	}
 
 }

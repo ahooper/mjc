@@ -1,9 +1,11 @@
-public class Test{
+public class Test {
+	int x;
 
-    public void main(String args[])
-    {
+    public void main(String args[]) {
     	int i;
-    } 
+    	Test test = new Test();
+    	test.x = 1;
+    }
 
 	int f(int x, float y) {
 	    g();   // forward reference is ok
@@ -22,4 +24,21 @@ public class Test{
 	    x = f; // f is not a variable (error)
 	}
 
+	class defaultInner {
+		int i;
+	}
+
+	public class publicInner {
+		int i;
+	}
+
+	protected class protectedInner {
+		int i;
+	}
+
+	private class privateInner {
+		int i;
+	}
 }
+
+;

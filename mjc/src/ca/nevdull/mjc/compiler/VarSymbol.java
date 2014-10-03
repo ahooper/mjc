@@ -10,7 +10,7 @@ public class VarSymbol extends Symbol {
 	}
 
     public String toString() {
-    	return getName();
+    	return getName()+":"+getType();
     }
 
 }

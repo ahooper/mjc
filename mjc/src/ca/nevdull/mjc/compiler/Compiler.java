@@ -93,7 +93,7 @@ public class Compiler {
         ParseTreeWalker walker = new ParseTreeWalker();
         DefinitionPass def = new DefinitionPass();
         walker.walk(def, tree);
-        ReferencePass ref = new ReferencePass(def.scopes, def.globals);
+        ReferencePass ref = new ReferencePass(def.scopes, def.globals, def.types);
         walker.walk(ref, tree);
 /*
         EmitVisit visitor = new EmitVisit();

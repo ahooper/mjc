@@ -12,6 +12,10 @@ public class ClassSymbol extends ScopingSymbol implements Scope {
 	public ClassSymbol(Token nameToken, Scope enclosingScope, ClassSymbol superClass) {
 		super(nameToken, enclosingScope);
 		this.superClass = superClass;
+        ReferenceType ref = new ReferenceType(nameToken);
+        	//TODO not sure this is the right thing to do here - should a class have a type? should that type be "java.lang.Class"?
+        ref.resolveTo(this);
+        this.type = ref;
 	}
 
 	@Override

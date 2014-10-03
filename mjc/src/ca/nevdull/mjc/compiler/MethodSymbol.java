@@ -30,7 +30,7 @@ public class MethodSymbol extends ScopingSymbol implements Scope {
 	}
 
     public String toString() {
-    	return "method "+getScopeName()+":"+parameters.values();
+    	return "method "+getScopeName()+":"+parameters.values()+":"+getType();
     }
 
 }

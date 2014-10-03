@@ -46,14 +46,15 @@ modifier
     ;
 
 classOrInterfaceModifier
-    :   (   'public'     // class or interface
+    :   (   PUBLIC     // class or interface
+    	|	PROTECTED
+    	|	PRIVATE
         )
     ;
 
-
 classDeclaration
-    :   'class' Identifier 
-        ('extends' type)?
+    :   CLASS Identifier 
+        (EXTENDS type)?
         classBody
     ;
 
@@ -63,7 +64,7 @@ classBody
 
 classBodyDeclaration
     :   ';'											# emptyClassBodyDeclaration
-    |   'static'? block								# blockClassBodyDeclaration
+    |   STATIC? block								# blockClassBodyDeclaration
     |   modifier* memberDeclaration					# memberClassBodyDeclaration
     ;
 
@@ -75,7 +76,7 @@ memberDeclaration
     ;
 
 methodDeclaration
-    :   (type|'void') Identifier formalParameters ('[' ']')*
+    :   (type|VOID) Identifier formalParameters arrayDimension
         (   methodBody
         |   ';'
         )
@@ -99,7 +100,7 @@ variableDeclarator
     ;
 
 variableDeclaratorId
-    :   Identifier ('[' ']')*
+    :   Identifier arrayDimension
     ;
 
 variableInitializer
@@ -112,23 +113,27 @@ arrayInitializer
     ;
 
 type
-    :   classOrInterfaceType ('[' ']')*				# objectType
-    |   primitiveType ('[' ']')*					# primitType
+    :   classOrInterfaceType arrayDimension				# objectType
+    |   primitiveType arrayDimension					# primitType
     ;
+    
+arrayDimension
+	:	('[' ']')*
+	;
 
 classOrInterfaceType
     :   Identifier ('.' Identifier )*
     ;
 
 primitiveType
-    :   'boolean'									# booleanType
-    |   'char'										# charType
-    |   'byte'										# byteType
-    |   'short'										# shortType
-    |   'int'										# intType
-    |   'long'										# longType
-    |   'float'										# floatType
-    |   'double'									# doubleType
+    :   BOOLEAN										# booleanType
+    |   CHAR										# charType
+    |   BYTE										# byteType
+    |   SHORT										# shortType
+    |   INT											# intType
+    |   LONG										# longType
+    |   FLOAT										# floatType
+    |   DOUBLE										# doubleType
     ;
 
 formalParameters
@@ -144,7 +149,7 @@ formalParameter
     ;
 
 variableModifier
-    :   'final'
+    :   FINAL
     ;
 
 methodBody
@@ -187,10 +192,10 @@ localVariableDeclaration
 
 statement
     :   block										# blkStatement
-    |   'if' parExpression statement
-    	('else' statement)?							# ifStatement
-    |   'while' parExpression statement				# whileStatement
-    |   'return' expression? ';'					# returnStatement
+    |   IF parExpression statement
+    	(ELSE statement)?							# ifStatement
+    |   WHILE parExpression statement				# whileStatement
+    |   RETURN expression? ';'						# returnStatement
     |   ';'											# emnptyStatement
     |   statementExpression ';'						# expressionStatement
     |   Identifier ':' statement					# labelStatement
@@ -217,7 +222,7 @@ expression
     |   expression '.' Identifier					# dotExpression
     |   expression '[' expression ']'				# indexExpression
     |   expression '(' expressionList? ')'			# callExpression
-    |   'new' creator								# newExpression
+    |   NEW creator									# newExpression
     |   '(' type ')' expression						# castExpression
     |   ('+'|'-') expression						# plusExpression
     |   ('~'|'!') expression						# notExpression
@@ -239,8 +244,8 @@ expression
 
 primary
     :   '(' expression ')'							# parenPrimary
-    |   'this'										# thisPrimary
-    |   'super'										# superPrimary
+    |   THIS										# thisPrimary
+    |   SUPER										# superPrimary
     |   literal										# literalPrimary
     |   Identifier									# identifierPrimary
     ;
@@ -256,8 +261,8 @@ createdName
 
 arrayCreatorRest
     :   '['
-        (   ']' ('[' ']')* arrayInitializer
-        |   expression ']' ('[' expression ']')* ('[' ']')*
+        (   ']' arrayDimension arrayInitializer
+        |   expression ']' ('[' expression ']')* arrayDimension
         )
     ;
 

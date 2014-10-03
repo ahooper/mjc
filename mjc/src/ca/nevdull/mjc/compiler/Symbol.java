@@ -34,4 +34,17 @@ public class Symbol {
     public Access getAccess() {
     	return access;
     }
+
+	public void setType(Type type) {
+		this.type = type;
+	}
+
+	public void setScope(Scope scope) {
+		this.scope = scope;
+	}
+
+	public void setAccess(Access access) {
+		this.access = access;
+		System.out.println(getName()+" setAccess "+access);
+	}
 }
