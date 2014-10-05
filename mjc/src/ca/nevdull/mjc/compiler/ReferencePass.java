@@ -1,5 +1,7 @@
 package ca.nevdull.mjc.compiler;
 
+import java.util.ListIterator;
+
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.misc.NotNull;
@@ -99,31 +101,40 @@ public class ReferencePass extends MJBaseListener {
 	
 	@Override
 	public void exitClassOrInterfaceType(MJParser.ClassOrInterfaceTypeContext ctx) {
-		//TODO resolve type
 		ReferenceType t = (ReferenceType)getType(ctx);
-		Symbol sym = null;
-		Token name = null;
-		for (TerminalNode i : ctx.Identifier()) {
-			name = i.getSymbol();
-			Symbol s = null;
-			if (sym == null) {
-				s = currentScope.resolve(name.getText());
-			} else if (sym instanceof ClassSymbol) {
-				s = ((ClassSymbol)sym).resolve(name.getText());
+		Token name = ctx.Identifier(0).getSymbol();
+		Symbol sym = currentScope.resolve(name.getText());
+        if (sym == null) {
+        	Compiler.error(name, name.getText()+" is not defined","exitClassOrInterfaceType");
+        } else {
+			for (ListIterator<TerminalNode> iter = ctx.Identifier().listIterator(1);
+				 iter.hasNext(); ) {
+				TerminalNode id = iter.next();
+				name = id.getSymbol();
+				if (sym instanceof ScopingSymbol) {
+					System.out.println("ClassOrInterfaceType lookup "+name.getText()+" in "+sym.toString());
+					Symbol s = ((ScopingSymbol)sym).resolveMember(name.getText());
+					if (s == null) {
+						Compiler.error(name, name.getText()+" is not defined in "+sym.toString(),"ClassOrInterfaceType");
+						sym = null;  // lookup failed
+						break;
+					}
+					sym = s;
+				} else {
+					Compiler.error(name, sym.getName()+" is not a scope: "+sym.toString(),"ClassOrInterfaceType");
+					sym = null;  // lookup failed
+					break;
+				}
 			}
-			if (s == null) {
-				Compiler.error(name, name.getText()+" is not defined");
-				break;
+			if (sym != null) {  // lookup succeeded
+				if (sym instanceof ClassSymbol) {
+					t.resolveTo((ClassSymbol)sym);
+					System.out.println(name.getText()+" type "+t);
+				} else {
+					Compiler.error(name, name.getText()+" is not a class: "+sym.toString(),"ClassOrInterfaceType");
+				}
 			}
-			sym = s;
-		}
-		if (sym instanceof ClassSymbol) {
-			System.out.println(name.getText()+" type "+t);
-			t.resolveTo((ClassSymbol)sym);
-		} else {
-			Compiler.error(name, name.getText()+" is not a class");
-		}
-
+        }
 	}
 	@Override public void exitBooleanType(MJParser.BooleanTypeContext ctx) { }
 	@Override public void exitDoubleType(MJParser.DoubleTypeContext ctx) { }
@@ -201,16 +212,22 @@ public class ReferencePass extends MJBaseListener {
         String name = token.getText();
         if (t instanceof ReferenceType) {
         	System.out.println("dotExpression "+t);
-        	ClassSymbol klass = ((ReferenceType) t).referredClass;
-        	Symbol sym = klass.resolve(name);
-        	if (sym == null) {
-        		Compiler.error(token, name+" is not defined in "+klass.getName());
+        	ClassSymbol klass = ((ReferenceType)t).referredClass;
+        	if (klass == null) {
+        		// error should have already been issued
+        		Compiler.error(token, t.toString()+" is unknown","DotExpression");
         		t = UnknownType.getInstance();
         	} else {
-        		t = sym.getType();
+	        	Symbol sym = klass.resolveMember(name);
+	        	if (sym == null) {
+	        		Compiler.error(token, name+" is not defined in "+klass.getName(),"DotExpression");
+	        		t = UnknownType.getInstance();
+	        	} else {
+	        		t = sym.getType();
+	        	}
         	}
-        } else {
-        	Compiler.error(token, "not a reference: "+t.toString());
+        } else if (!(t instanceof UnknownType)) {
+        	Compiler.error(token, "not a reference: "+t.toString(),"DotExpression");
         }
 		setType(ctx, t);
 	}
@@ -231,7 +248,7 @@ public class ReferencePass extends MJBaseListener {
         Symbol sym = currentScope.resolve(name);
         Type t;
         if (sym == null) {
-        	Compiler.error(token, name+" is not defined");
+        	Compiler.error(token, name+" is not defined","IdentifierPrimary");
         	t = UnknownType.getInstance();
         } else {
         	t = sym.getType();

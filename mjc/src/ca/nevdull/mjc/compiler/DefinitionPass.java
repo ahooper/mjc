@@ -57,7 +57,7 @@ public class DefinitionPass extends MJBaseListener {
 				if (access == Access.AccessDefault) {
 					access = a;
 				} else {
-					Compiler.error(m.getStart(),"conflicts with previous modifier "+access);
+					Compiler.error(m.getStart(),"conflicts with previous modifier "+access,"TypeDeclaration");
 				}
 			} else assert false : "unrecognized classOrInterfaceModifier";
 		}

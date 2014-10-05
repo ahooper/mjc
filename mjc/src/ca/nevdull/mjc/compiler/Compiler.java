@@ -60,6 +60,11 @@ public class Compiler {
         System.err.printf("line %d@%d %s\n", t.getLine(), t.getCharPositionInLine(),
                           msg);
     }
+	
+    public static void error(Token t, String msg, String caller) {
+        System.err.printf("line %d@%d %s - %s\n", t.getLine(), t.getCharPositionInLine(),
+                          msg, caller);
+    }
 
     public void process(String[] args) throws Exception {
         if ( args.length>0 ) {

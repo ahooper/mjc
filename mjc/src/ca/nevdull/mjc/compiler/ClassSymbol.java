@@ -1,5 +1,14 @@
 package ca.nevdull.mjc.compiler;
 
+/***
+ * Excerpted from "Language Implementation Patterns",
+ * published by The Pragmatic Bookshelf.
+ * Copyrights apply to this code. It may not be used to create training material, 
+ * courses, books, articles, and the like. Contact us if you are in doubt.
+ * We make no guarantees that this code is fit for any purpose. 
+ * Visit http://www.pragmaticprogrammer.com/titles/tpdsl for more book information.
+***/
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -18,25 +27,24 @@ public class ClassSymbol extends ScopingSymbol implements Scope {
         this.type = ref;
 	}
 
-	@Override
-	public void define(Symbol sym) {
-        members.put(sym.name, sym);
-        sym.scope = this; // track the scope in each symbol
+	public void setSuperClass(ClassSymbol superClass) {
+		this.superClass = superClass;
 	}
 
 	@Override
-	public Symbol resolve(String name) {
-        Symbol s = members.get(name);
-        if (s != null) return s;
-        // if not here, check the parent class
-        if (superClass != null ) {
-            return superClass.resolve(name);
-        }
-        return null; // not found
-	}
+	public Scope getParentScope() {
+        if (superClass == null) return enclosingScope;
+        return superClass;
+    }
 
+	@Override
 	public Map<String, Symbol> getMembers() {
 		return members;
+	}
+
+	@Override
+	public ClassSymbol getInheritance() {
+		return superClass;
 	}
 
     public String toString() {

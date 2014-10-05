@@ -1,5 +1,14 @@
 package ca.nevdull.mjc.compiler;
 
+/***
+ * Excerpted from "Language Implementation Patterns",
+ * published by The Pragmatic Bookshelf.
+ * Copyrights apply to this code. It may not be used to create training material, 
+ * courses, books, articles, and the like. Contact us if you are in doubt.
+ * We make no guarantees that this code is fit for any purpose. 
+ * Visit http://www.pragmaticprogrammer.com/titles/tpdsl for more book information.
+***/
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -13,24 +22,18 @@ public class MethodSymbol extends ScopingSymbol implements Scope {
 	}
 
 	@Override
-	public void define(Symbol sym) {
-		parameters.put(sym.name, sym);
-        sym.scope = this; // track the scope in each symbol
-	}
-
-	@Override
-	public Symbol resolve(String name) {
-        Symbol s = parameters.get(name);
-        if (s != null) return s;
-        // if not here, check any enclosing scope
-        if (getEnclosingScope() != null) {
-            return getEnclosingScope().resolve(name);
-        }
-        return null; // not found
+	public Map<String, Symbol> getMembers() {
+		return parameters;
 	}
 
     public String toString() {
     	return "method "+getScopeName()+":"+parameters.values()+":"+getType();
     }
+
+	@Override
+	public ScopingSymbol getInheritance() {
+		// TODO Auto-generated method stub
+		return null;
+	}
 
 }

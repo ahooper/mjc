@@ -23,7 +23,10 @@ public abstract class BaseScope implements Scope {
         Symbol s = symbols.get(name);
         if (s != null ) return s;
         // if not here, check any enclosing scope
-        if (enclosingScope != null) return enclosingScope.resolve(name);
+        if (enclosingScope != null) {
+        	System.out.println(getScopeName()+" resolve enclosing "+enclosingScope.toString());
+        	return enclosingScope.resolve(name);
+        }
         return null; // not found
     }
 
