@@ -1,5 +1,5 @@
 package ca.nevdull.mjc.compiler;
 
-public class Type {
-
+public interface Type {
+    public String getName();
 }

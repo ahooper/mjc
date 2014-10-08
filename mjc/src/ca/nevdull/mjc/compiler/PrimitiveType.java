@@ -1,10 +1,8 @@
 package ca.nevdull.mjc.compiler;
 
-public class PrimitiveType extends Type {
-	private String name;
+public class PrimitiveType extends Symbol implements Type {
 	private PrimitiveType(String name) {
-		super();
-		this.name = name;
+		super(name);
 	}
 	public String toString() {
 		return name;

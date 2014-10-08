@@ -79,6 +79,7 @@ methodDeclaration
     :   (type|VOID) Identifier formalParameters arrayDimension
         (   methodBody
         |   ';'
+        |	'native'
         )
     ;
 

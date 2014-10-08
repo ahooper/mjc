@@ -1,9 +1,11 @@
 package ca.nevdull.mjc.compiler;
 
-public class UnknownType extends Type {
+public class UnknownType extends Symbol implements Type {
 	private static final UnknownType INSTANCE = new UnknownType();
 	 
-    private UnknownType() {}
+    private UnknownType() {
+    	super("unknown");
+    }
  
     public static UnknownType getInstance() {
         return INSTANCE;

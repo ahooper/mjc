@@ -32,6 +32,7 @@ public class Compiler {
 	        System.err.println(line+":"+charPositionInLine+" "+msg);
 	        underlineError(recognizer,(Token)offendingSymbol,
 	                       line, charPositionInLine);
+System.err.flush();
 	    }
 
 	    protected void underlineError(Recognizer<?, ?> recognizer,
@@ -59,11 +60,13 @@ public class Compiler {
     public static void error(Token t, String msg) {
         System.err.printf("line %d@%d %s\n", t.getLine(), t.getCharPositionInLine(),
                           msg);
+System.err.flush();
     }
 	
     public static void error(Token t, String msg, String caller) {
         System.err.printf("line %d@%d %s - %s\n", t.getLine(), t.getCharPositionInLine(),
                           msg, caller);
+System.err.flush();
     }
 
     public void process(String[] args) throws Exception {
@@ -98,8 +101,10 @@ public class Compiler {
         ParseTreeWalker walker = new ParseTreeWalker();
         DefinitionPass def = new DefinitionPass();
         walker.walk(def, tree);
-        ReferencePass ref = new ReferencePass(def.scopes, def.globals, def.types);
+        System.out.println("\n------------------------------------------------------------\n");
+        ReferencePass ref = new ReferencePass(def.scopes, def.globals, def.symbols);
         walker.walk(ref, tree);
+        System.out.println("\n------------------------------------------------------------\n");
 /*
         EmitVisit visitor = new EmitVisit();
         visitor.visit(tree);

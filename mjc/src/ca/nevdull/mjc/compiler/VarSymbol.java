@@ -4,9 +4,9 @@ import org.antlr.v4.runtime.Token;
 
 public class VarSymbol extends Symbol {
 
-	public VarSymbol(Token nameToken) {
+	public VarSymbol(Token nameToken, Type type) {
 		super(nameToken);
-		// TODO Auto-generated constructor stub
+		setType(type);
 	}
 
     public String toString() {
