@@ -13,7 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 public class Compiler {
-	
+
 	/***
 	 * Excerpted from "The Definitive ANTLR 4 Reference",
 	 * published by The Pragmatic Bookshelf.
@@ -79,6 +79,8 @@ System.err.flush();
         	process1(System.in);
         }
     }
+	
+	private static final String DIVIDER = "\n------------------------------------------------------------\n";
 
 	/**
 	 * @param is
@@ -101,14 +103,12 @@ System.err.flush();
         ParseTreeWalker walker = new ParseTreeWalker();
         DefinitionPass def = new DefinitionPass();
         walker.walk(def, tree);
-        System.out.println("\n------------------------------------------------------------\n");
+        System.out.println(DIVIDER);
         ReferencePass ref = new ReferencePass(def.scopes, def.globals, def.symbols);
         walker.walk(ref, tree);
-        System.out.println("\n------------------------------------------------------------\n");
-/*
-        EmitVisit visitor = new EmitVisit();
-        visitor.visit(tree);
-*/
+        System.out.println(DIVIDER);
+        GeneratePass gen = new GeneratePass(ref.symbols, ref.types);
+        walker.walk(gen, tree);
 	}
 
 	public static void main(String[] args) {

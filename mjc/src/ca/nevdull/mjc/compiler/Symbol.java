@@ -23,7 +23,11 @@ public class Symbol {
     	return name;
     }
     
-    public Type getType() {
+	public Token getToken() {
+		return token;
+	}
+
+	public Type getType() {
     	return type;
     }
     

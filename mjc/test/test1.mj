@@ -1,5 +1,6 @@
 public class Test {
 	int x;
+	defaultInner di;  // forward reference
 
     public void main(String args[]) {
     	int i;
@@ -17,11 +18,13 @@ public class Test {
 	void g() {
 	    int x = 0;
 	    float y;
-	    y = 9; // y is defined
+	    y = 9+x; // y is defined
 	    f();   // backward reference is ok
 	    z();   // no such function (error)
 	    y();   // y is not function (error)
 	    x = f; // f is not a variable (error)
+	    int err = fwd;
+	    int fwd = 0;
 	}
 
 	class defaultInner {

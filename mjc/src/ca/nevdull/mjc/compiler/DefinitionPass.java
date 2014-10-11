@@ -10,20 +10,20 @@ public class DefinitionPass extends MJBaseListener {
     Scope currentScope; // define symbols in this scope
     ParseTreeProperty<Symbol> symbols = new ParseTreeProperty<Symbol>();
 
-    void saveScope(ParserRuleContext ctx, Scope s) {
+    private void saveScope(ParserRuleContext ctx, Scope s) {
     	scopes.put(ctx, s);
     }
     
-    void popScope() {
+    private void popScope() {
 	    System.out.println(currentScope);
 	    currentScope = currentScope.getEnclosingScope();
     }
     
-    public void saveSymbol(ParserRuleContext node, Symbol sym) {
+    private void saveSymbol(ParserRuleContext node, Symbol sym) {
     	symbols.put(node, sym);
     }
     
-    public Symbol getSymbol(ParserRuleContext node) {
+    private Symbol getSymbol(ParserRuleContext node) {
     	Symbol sym = symbols.get(node);
     	assert sym != null;
     	return sym;

@@ -13,20 +13,6 @@ public class ReferencePass extends MJBaseListener {
     GlobalScope globals;
     ParseTreeProperty<Symbol> symbols;
     ParseTreeProperty<Type> types = new ParseTreeProperty<Type>();
-    
-    public void setType(ParserRuleContext node, Type type) {
-    	types.put(node, type);
-    }
-    
-    public Type getType(ParserRuleContext node) {
-    	Type t = types.get(node);
-    	assert t != null;
-    	return t;
-    }
-      
-    public void promoteType(ParserRuleContext node, ParserRuleContext subNode) {
-    	setType(node, getType(subNode));
-    }
 	
     /**
 	 * @param scopes
@@ -38,6 +24,20 @@ public class ReferencePass extends MJBaseListener {
 		this.globals = globals;
 		this.symbols = symbols;
 	}
+    
+    private void setType(ParserRuleContext node, Type type) {
+    	types.put(node, type);
+    }
+    
+    private Type getType(ParserRuleContext node) {
+    	Type t = types.get(node);
+    	assert t != null;
+    	return t;
+    }
+      
+    private void promoteType(ParserRuleContext node, ParserRuleContext subNode) {
+    	setType(node, getType(subNode));
+    }
 /*
  * grep 'Context extends ' MJParser.java  | sed  's/ *public static class \([a-zA-Z]*\) .*$/@Override public void exit\1(MJParser.\1Context ctx) { }/' | sed 's/Context//' | sed 's/Context//'
  */
@@ -194,31 +194,7 @@ public class ReferencePass extends MJBaseListener {
 	@Override public void exitMethodBody(MJParser.MethodBodyContext ctx) { }
 	@Override public void exitConstructorBody(MJParser.ConstructorBodyContext ctx) { }
 	@Override public void exitQualifiedName(MJParser.QualifiedNameContext ctx) { }
-	@Override public void exitLiteral(MJParser.LiteralContext ctx) {
-		String text = ctx.getText(); 
-		Type t = null;
-		if (ctx.IntegerLiteral() != null) {
-			t = PrimitiveType.intType;
-			if (text.endsWith("l") || text.endsWith("L")) {
-				t = PrimitiveType.longType;
-			}
-		} else if (ctx.FloatingPointLiteral() != null) {
-			t = PrimitiveType.floatType;
-			if (text.endsWith("d") || text.endsWith("D")) {
-				t = PrimitiveType.doubleType;
-			}
-		} else if (ctx.CharacterLiteral() != null) {
-			t = PrimitiveType.charType;
-		} else if (ctx.BooleanLiteral() != null) {
-			t = PrimitiveType.booleanType;
-		} else if (ctx.StringLiteral() != null) {
-			//TODO t = String;
-		} else {
-			assert text.equals("null");
-			//TODO t = Object; 
-		}
-		setType(ctx, t);
-	}
+	@Override public void exitLiteral(MJParser.LiteralContext ctx) {	}
 	@Override public void exitBlockStatement(MJParser.BlockStatementContext ctx) { }
 	@Override public void exitLocalVariableDeclarationStatement(MJParser.LocalVariableDeclarationStatementContext ctx) { }
 	@Override public void exitLocalVariableDeclaration(MJParser.LocalVariableDeclarationContext ctx) {
@@ -238,10 +214,7 @@ public class ReferencePass extends MJBaseListener {
 	@Override public void exitBlkStatement(MJParser.BlkStatementContext ctx) { }
 	@Override public void exitIfStatement(MJParser.IfStatementContext ctx) { }
 	
-	@Override
-	public void exitParExpression(MJParser.ParExpressionContext ctx) {
-		promoteType(ctx, ctx.expression());
-	}
+	@Override public void exitParExpression(MJParser.ParExpressionContext ctx) {	}
 	@Override public void exitExpressionList(MJParser.ExpressionListContext ctx) { }
 	@Override public void exitStatementExpression(MJParser.StatementExpressionContext ctx) { }
 	@Override public void exitConstantExpression(MJParser.ConstantExpressionContext ctx) { }
@@ -251,12 +224,7 @@ public class ReferencePass extends MJBaseListener {
 	@Override public void exitAssignExpression(MJParser.AssignExpressionContext ctx) { }
 	@Override public void exitNotExpression(MJParser.NotExpressionContext ctx) { }
 	
-	@Override
-	public void exitCallExpression(MJParser.CallExpressionContext ctx) {
-		System.out.println("exitCallExpression "+ctx.getText());
-		Type type = getType(ctx.expression());
-		System.out.println("CallExpression "+type.toString());
-	}
+	@Override public void exitCallExpression(MJParser.CallExpressionContext ctx) {	}
 	@Override public void exitOrExpression(MJParser.OrExpressionContext ctx) { }
 	@Override public void exitIndexExpression(MJParser.IndexExpressionContext ctx) { }
 	@Override public void exitEqualExpression(MJParser.EqualExpressionContext ctx) { }
@@ -264,62 +232,45 @@ public class ReferencePass extends MJBaseListener {
 	@Override public void exitCondAndExpression(MJParser.CondAndExpressionContext ctx) { }
 	@Override public void exitAndExpression(MJParser.AndExpressionContext ctx) { }
 	
-	@Override
-	public void exitPrimExpression(MJParser.PrimExpressionContext ctx) {
-		promoteType(ctx, ctx.primary());
-	}
+	@Override public void exitPrimExpression(MJParser.PrimExpressionContext ctx) {	}
 	@Override public void exitCondOrExpression(MJParser.CondOrExpressionContext ctx) { }
 	@Override public void exitCastExpression(MJParser.CastExpressionContext ctx) { }
 	
-	@Override
-	public void exitDotExpression(MJParser.DotExpressionContext ctx) {
-		Type type = getType(ctx.expression());
-    	Token token = ctx.Identifier().getSymbol();
-        String name = token.getText();
-        if (type instanceof ScopingSymbol) {
-        	Symbol sym = ((ScopingSymbol) type).resolveMember(name);
-        	if (sym == null) {
-        		Compiler.error(token, name+" is not defined in "+type.getName(),"DotExpression");
-        		type = UnknownType.getInstance();
-        	} else {
-        		type = sym.getType();
-        	}
-        } else if (!(type instanceof UnknownType)) {
-        	Compiler.error(token, "not a reference: "+type.toString(),"DotExpression");
-        }
-		setType(ctx, type);
-	}
+	@Override public void exitDotExpression(MJParser.DotExpressionContext ctx) {	}
 	@Override public void exitShiftExpression(MJParser.ShiftExpressionContext ctx) { }
 	@Override public void exitPlusExpression(MJParser.PlusExpressionContext ctx) { }
 	@Override public void exitNewExpression(MJParser.NewExpressionContext ctx) { }
 	
-	@Override
-	public void exitLiteralPrimary(MJParser.LiteralPrimaryContext ctx) {
-		promoteType(ctx, ctx.literal());
-	}
+	@Override public void exitLiteralPrimary(MJParser.LiteralPrimaryContext ctx) {	}
 	@Override public void exitSuperPrimary(MJParser.SuperPrimaryContext ctx) { }
 	
 	@Override
 	public void exitIdentifierPrimary(@NotNull MJParser.IdentifierPrimaryContext ctx) {
     	Token token = ctx.Identifier().getSymbol();
         String name = token.getText();
-        Symbol sym = scopes.get(ctx).resolve(name);
-        Type t;
+        Scope refScope = scopes.get(ctx);
+        Symbol sym = refScope.resolve(name);
         if (sym == null) {
         	Compiler.error(token, name+" is not defined","IdentifierPrimary");
-        	t = UnknownType.getInstance();
         } else {
-        	t = sym.getType();
+        	// check for forward local reference forbidden
+        	int refLocation = token.getTokenIndex();
+        	Scope defScope = sym.getScope();
+        	int defLocation = sym.getToken().getTokenIndex();
+        	System.out.println(name+" ref@"+refLocation+" def@"+defLocation);
+        	if (   refScope instanceof BaseScope
+        		&& defScope instanceof BaseScope
+        		&& refLocation < defLocation ) {
+        		Compiler.error(token, name+" is forward local variable reference");
+        		sym = null;
+        	} else {
+        		symbols.put(ctx, sym);
+        	}
         }
-		System.out.println(name+" type "+t);
-        setType(ctx, t);
 	}
 	@Override public void exitThisPrimary(MJParser.ThisPrimaryContext ctx) { }
 	
-	@Override
-	public void exitParenPrimary(MJParser.ParenPrimaryContext ctx) {
-		promoteType(ctx, ctx.expression());
-	}
+	@Override public void exitParenPrimary(MJParser.ParenPrimaryContext ctx) {	}
 	@Override public void exitCreator(MJParser.CreatorContext ctx) { }
 	@Override public void exitCreatedName(MJParser.CreatedNameContext ctx) { }
 	@Override public void exitArrayCreatorRest(MJParser.ArrayCreatorRestContext ctx) { }
