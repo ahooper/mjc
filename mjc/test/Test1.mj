@@ -1,10 +1,10 @@
-public class Test {
+public class Test1 {
 	int x;
 	defaultInner di;  // forward reference
 
     public void main(String args[]) {
     	int i;
-    	Test test = new Test();
+    	Test1 test = new Test1();
     	test.x = 1;
     }
 

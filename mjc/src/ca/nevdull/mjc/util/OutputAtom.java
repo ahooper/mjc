@@ -2,16 +2,16 @@ package ca.nevdull.mjc.util;
 
 import java.io.PrintStream;
 
-public class AtomBuilder extends OutputBuilder {
+public class OutputAtom extends OutputItem {
 	String text;
 	
-	public AtomBuilder(String text) {
+	public OutputAtom(String text) {
 		super();
 		this.text = text;
 	}
 
 	@Override
-	public void render(PrintStream stream) {
+	public void print(PrintStream stream) {
 		stream.print(text);
 	}
 

@@ -8,6 +8,7 @@ import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.*;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -71,12 +72,13 @@ System.err.flush();
 
     public void process(String[] args) throws Exception {
         if ( args.length>0 ) {
-        	for (String inputFile : args) {
-	            InputStream is = new FileInputStream(inputFile);
-	            process1(is);
+        	for (String inFileName : args) {
+    			File inputFile = new File(inFileName);
+    			File dir = inputFile.getParentFile();
+    	        process1(new FileInputStream(inputFile), dir);
         	}
         } else {
-        	process1(System.in);
+        	process1(System.in, null);
         }
     }
 	
@@ -87,7 +89,7 @@ System.err.flush();
 	 * @throws IOException
 	 * @throws RecognitionException
 	 */
-	public void process1(InputStream is) throws IOException,
+	public void process1(InputStream is, File outputDir) throws IOException,
 			RecognitionException {
 		ANTLRInputStream input = new ANTLRInputStream(is);
         MJLexer lexer = new MJLexer(input);
@@ -107,7 +109,7 @@ System.err.flush();
         ReferencePass ref = new ReferencePass(def.scopes, def.globals, def.symbols);
         walker.walk(ref, tree);
         System.out.println(DIVIDER);
-        GeneratePass gen = new GeneratePass(ref.symbols, ref.types);
+        GeneratePass gen = new GeneratePass(ref.symbols, ref.types, outputDir);
         walker.walk(gen, tree);
 	}
 

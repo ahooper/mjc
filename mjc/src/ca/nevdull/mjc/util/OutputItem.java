@@ -2,12 +2,12 @@ package ca.nevdull.mjc.util;
 
 import java.io.PrintStream;
 
-public abstract class OutputBuilder {
+public abstract class OutputItem {
 
-	public OutputBuilder() {
+	public OutputItem() {
 		// TODO Auto-generated constructor stub
 	}
 	
-	public abstract void render(PrintStream stream);
+	public abstract void print(PrintStream stream);
 
 }
