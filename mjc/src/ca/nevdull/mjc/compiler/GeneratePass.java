@@ -10,6 +10,7 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTreeProperty;
 
+import ca.nevdull.mjc.compiler.MJParser.ExpressionContext;
 import ca.nevdull.mjc.compiler.MJParser.VariableDeclaratorContext;
 import ca.nevdull.mjc.compiler.MJParser.VariableDeclaratorIdContext;
 import ca.nevdull.mjc.util.OutputAtom;
@@ -122,12 +123,12 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitEmptyClassBodyDeclaration(MJParser.EmptyClassBodyDeclarationContext ctx) { }
 	@Override public void exitMemberDeclaration(MJParser.MemberDeclarationContext ctx) { }
 	@Override public void enterMethodDeclaration(MJParser.MethodDeclarationContext ctx) {
-		//TODO type
 		Symbol sym = symbols.get(ctx);
-		currDest.vtable.add(typeName("(*"+sym.getName()+")", sym.getType())).add(";\n");
-		currDest.methods.add(typeName(currDest.getSymbol().getName()+"_"+sym.getName(), sym.getType()));
+		currDest.vtable.add(typeName("(*"+sym.getName()+")", sym.getType()));
+		currDest.methods.add(typeName(sym.getName()+"_"+currDest.getSymbol().getName(), sym.getType()));
 	}
 	@Override public void exitMethodDeclaration(MJParser.MethodDeclarationContext ctx) {
+		currDest.vtable.add(";\n");
 		currDest.methods.add("\n");
 	}
 	@Override public void exitConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) { }
@@ -185,14 +186,17 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitByteType(MJParser.ByteTypeContext ctx) { }
 	@Override public void exitLongType(MJParser.LongTypeContext ctx) { }
 	@Override public void enterFormalParameters(MJParser.FormalParametersContext ctx) {
+		currDest.vtable.add("(",currDest.getSymbol().getName()," ","this");
 		currDest.methods.add("(",currDest.getSymbol().getName()," ","this");
 	}
 	@Override public void exitFormalParameters(MJParser.FormalParametersContext ctx) {
+		currDest.vtable.add(")");
 		currDest.methods.add(") ");
 	}
 	@Override public void exitFormalParameterList(MJParser.FormalParameterListContext ctx) { }
 	@Override public void enterFormalParameter(MJParser.FormalParameterContext ctx) {
 		Symbol sym = symbols.get(ctx.variableDeclaratorId());
+		currDest.vtable.add(", ").add(typeName(sym.getName(), sym.getType()));			
 		currDest.methods.add(", ").add(typeName(sym.getName(), sym.getType()));			
 	}
 	@Override public void exitVariableModifier(MJParser.VariableModifierContext ctx) { }
@@ -255,7 +259,11 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitBlkStatement(MJParser.BlkStatementContext ctx) { }
 	@Override public void exitIfStatement(MJParser.IfStatementContext ctx) { }
 	@Override public void exitParExpression(MJParser.ParExpressionContext ctx) { }
-	@Override public void exitExpressionList(MJParser.ExpressionListContext ctx) { }
+	@Override public void exitExpressionList(MJParser.ExpressionListContext ctx) {
+		for (ExpressionContext exp : ctx.expression()) {
+			currDest.methods.add(",").add(rands.get(exp));
+		}
+	}
 	@Override public void exitStatementExpression(MJParser.StatementExpressionContext ctx) { }
 	@Override public void exitConstantExpression(MJParser.ConstantExpressionContext ctx) { }
 	@Override public void exitCompareExpression(MJParser.CompareExpressionContext ctx) { }
@@ -279,10 +287,21 @@ public class GeneratePass extends MJBaseListener {
 		rands.put(ctx, rands.get(ctx.expression(0)));
 	}
 	@Override public void exitNotExpression(MJParser.NotExpressionContext ctx) { }
-	@Override public void exitCallExpression(MJParser.CallExpressionContext ctx) {
-		System.out.println("exitCallExpression "+ctx.getText());
+	@Override public void enterCallExpression(MJParser.CallExpressionContext ctx) {
+		System.out.println("enterCallExpression "+ctx.getText());
+		MJParser.ExpressionContext exp = ctx.expression();
+		OutputItem method = rands.get(exp);
 		Type type = getType(ctx.expression());
-		System.out.println("CallExpression "+type.toString());
+		if (!(type instanceof VoidType)) {
+			String rand = "_e"+nextreg();
+			currDest.methods.add(rand,"=");
+			rands.put(ctx, new OutputAtom(rand));
+		}
+		setType(ctx, type);
+		currDest.methods.add("(");
+	}
+	@Override public void exitCallExpression(MJParser.CallExpressionContext ctx) {
+		currDest.methods.add(");\n");
 	}
 	@Override public void exitOrExpression(MJParser.OrExpressionContext ctx) {
 		//TODO types

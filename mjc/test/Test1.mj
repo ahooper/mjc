@@ -19,7 +19,7 @@ public class Test1 {
 	    int x = 0;
 	    float y;
 	    y = 9+x; // y is defined
-	    f();   // backward reference is ok
+	    f(1,3.14159);   // backward reference is ok
 	    z();   // no such function (error)
 	    y();   // y is not function (error)
 	    x = f; // f is not a variable (error)
