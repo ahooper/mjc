@@ -15,4 +15,9 @@ public class OutputAtom extends OutputItem {
 		stream.print(text);
 	}
 
+	@Override
+	public String toString() {
+		return "OutputAtom [text=" + text + "]";
+	}
+
 }

@@ -14,7 +14,7 @@ import java.util.Map;
 
 import org.antlr.v4.runtime.Token;
 
-public class MethodSymbol extends ScopingSymbol implements Scope {
+public class MethodSymbol extends ScopingSymbol implements Scope, Type {
 	Map<String, Symbol> parameters = new LinkedHashMap<String, Symbol>();
 
 	public MethodSymbol(Token nameToken, Scope enclosingScope) {

@@ -34,4 +34,9 @@ public class OutputList extends OutputItem {
 		}
 	}
 
+	@Override
+	public String toString() {
+		return "OutputList [list=" + list + "]";
+	}
+
 }

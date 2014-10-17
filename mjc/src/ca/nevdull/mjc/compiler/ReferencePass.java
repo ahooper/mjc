@@ -35,14 +35,7 @@ public class ReferencePass extends MJBaseListener {
     	return t;
     }
       
-    private void promoteType(ParserRuleContext node, ParserRuleContext subNode) {
-    	setType(node, getType(subNode));
-    }
-/*
- * grep 'Context extends ' MJParser.java  | sed  's/ *public static class \([a-zA-Z]*\) .*$/@Override public void exit\1(MJParser.\1Context ctx) { }/' | sed 's/Context//' | sed 's/Context//'
- */
-	
-	@Override 
+    @Override 
 	public void exitClassDeclaration(@NotNull MJParser.ClassDeclarationContext ctx) {
 		ClassSymbol klass = (ClassSymbol)symbols.get(ctx);
 		if (ctx.type() != null) {
