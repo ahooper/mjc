@@ -1,0 +1,11 @@
+class Class {
+
+  public String getName() { 
+    return VMClass.getName (this);
+  }
+  
+  public Class getSuperclass() {
+    return VMClass.getSuperclass (this);
+  }
+  
+}

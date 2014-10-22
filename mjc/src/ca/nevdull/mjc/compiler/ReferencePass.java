@@ -25,6 +25,12 @@ public class ReferencePass extends MJBaseListener {
 		this.symbols = symbols;
 	}
     
+    private Symbol getSymbol(ParserRuleContext node) {
+    	Symbol sym = symbols.get(node);
+    	assert sym != null;
+    	return sym;
+    }
+    
     private void setType(ParserRuleContext node, Type type) {
     	types.put(node, type);
     }
@@ -37,7 +43,7 @@ public class ReferencePass extends MJBaseListener {
       
     @Override 
 	public void exitClassDeclaration(@NotNull MJParser.ClassDeclarationContext ctx) {
-		ClassSymbol klass = (ClassSymbol)symbols.get(ctx);
+		ClassSymbol klass = (ClassSymbol)getSymbol(ctx);
 		if (ctx.type() != null) {
 			Type t = getType(ctx.type());
 			if (t instanceof ClassSymbol) {
@@ -56,7 +62,7 @@ public class ReferencePass extends MJBaseListener {
 
 	@Override
 	public void exitMethodDeclaration(@NotNull MJParser.MethodDeclarationContext ctx) {
-		Symbol method = symbols.get(ctx);
+		Symbol method = getSymbol(ctx);
 		Type t;
 		if (ctx.type() != null) {
 			t = getType(ctx.type());
@@ -69,6 +75,10 @@ public class ReferencePass extends MJBaseListener {
 
 	@Override
 	public void exitConstructorDeclaration(@NotNull MJParser.ConstructorDeclarationContext ctx) {
+		Symbol method = getSymbol(ctx);
+		Type t = VoidType.getInstance();
+		method.setType(t);
+		System.out.println(method.getName()+" type is "+t.toString());
 	}
 	@Override public void exitFieldDeclaration(MJParser.FieldDeclarationContext ctx) {
 		Type t = getType(ctx.type());
@@ -78,7 +88,7 @@ public class ReferencePass extends MJBaseListener {
 		}
 	}
 	public void setVariableType(MJParser.VariableDeclaratorIdContext vdi, Type t) {
-		Symbol var = symbols.get(vdi);
+		Symbol var = getSymbol(vdi);
 		t = applyDimensions(vdi.arrayDimension(), t);
 		var.setType(t);
 		System.out.println(var.getName()+" type is "+t.toString());

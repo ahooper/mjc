@@ -1,6 +1,7 @@
 package ca.nevdull.mjc.compiler;
 
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.misc.NotNull;
 import org.antlr.v4.runtime.tree.ParseTreeProperty;
 
@@ -85,7 +86,14 @@ public class DefinitionPass extends MJBaseListener {
 
 	@Override
 	public void enterConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) {
-		MethodSymbol method = new MethodSymbol(ctx.Identifier().getSymbol(), currentScope);
+    	Token token = ctx.Identifier().getSymbol();
+        String name = token.getText();
+        Scope refScope = scopes.get(ctx).getEnclosingScope();
+        Symbol sym = refScope.resolve(name);
+        if (sym != refScope) {
+        	Compiler.error(token, name+" is not the class name","ConstructorDeclaration");
+        }
+		MethodSymbol method = new MethodSymbol(token, currentScope);
 		currentScope.define(method);
         currentScope = method;
         saveScope(ctx, currentScope);  //TODO is this needed/used?

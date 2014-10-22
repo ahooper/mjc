@@ -13,9 +13,9 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.ParseTreeProperty;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
 
-import ca.nevdull.mjc.util.OutputAtom;
-import ca.nevdull.mjc.util.OutputItem;
-import ca.nevdull.mjc.util.OutputList;
+import ca.nevdull.mjc.compiler.util.OutputAtom;
+import ca.nevdull.mjc.compiler.util.OutputItem;
+import ca.nevdull.mjc.compiler.util.OutputList;
 
 public class GeneratePass extends MJBaseListener {
     ParseTreeProperty<Symbol> symbols;
@@ -24,14 +24,14 @@ public class GeneratePass extends MJBaseListener {
     File outputDir;
     Map<PrimitiveType,String> primitiveTypeMap = new IdentityHashMap<PrimitiveType,String>();   
     {
-    	primitiveTypeMap.put(PrimitiveType.booleanType, "boolean");
-    	primitiveTypeMap.put(PrimitiveType.byteType, "byte");
-    	primitiveTypeMap.put(PrimitiveType.charType, "char");
-    	primitiveTypeMap.put(PrimitiveType.doubleType, "double");
-    	primitiveTypeMap.put(PrimitiveType.floatType, "float");
-    	primitiveTypeMap.put(PrimitiveType.intType, "int");
-    	primitiveTypeMap.put(PrimitiveType.longType, "long");
-    	primitiveTypeMap.put(PrimitiveType.shortType, "short");
+    	primitiveTypeMap.put(PrimitiveType.booleanType, "jboolean");
+    	primitiveTypeMap.put(PrimitiveType.byteType, "jbyte");
+    	primitiveTypeMap.put(PrimitiveType.charType, "jchar");
+    	primitiveTypeMap.put(PrimitiveType.doubleType, "jdouble");
+    	primitiveTypeMap.put(PrimitiveType.floatType, "jfloat");
+    	primitiveTypeMap.put(PrimitiveType.intType, "jint");
+    	primitiveTypeMap.put(PrimitiveType.longType, "jlong");
+    	primitiveTypeMap.put(PrimitiveType.shortType, "jshort");
     }
 
 	public GeneratePass(ParseTreeProperty<Symbol> symbols, ParseTreeProperty<Type> types, File outputDir) {
@@ -90,25 +90,47 @@ public class GeneratePass extends MJBaseListener {
 			}
 		}
 	}
+	
+	/*
+	 * class structure
+	 * instance structure
+	 * method table structure
+	 * method prototypes
+	 * class structure initialization
+	 * method table initialization
+	 * method bodies
+	 */
     
+	/**
+	 * The output components of a class implementation
+	 */
     class ClassDest {
     	ClassSymbol symbol;
     	ClassDest enclosingClass;
-    	OutputList vtable;
-    	OutputList instance;
-    	OutputList methods;
+    	boolean haveConstructor = false;
+    	OutputList classStructure;
+    	OutputList methodTableStructure;
+    	OutputList instanceStructure;
+    	OutputList classStructureInitialization;
+    	OutputList methodPrototypes;
+    	OutputList methodTableInitialization;
+    	OutputList methodBodies;
     	PrintStream outStream;
  		public ClassDest(ClassSymbol symbol, ClassDest enclosingClass) {
 			super();
 			this.symbol = symbol;
 			this.enclosingClass = enclosingClass;
-	    	this.vtable = new OutputList();
-	    	this.instance = new OutputList();
-	    	this.methods = new OutputList();
+			this.classStructure = new OutputList();					this.classStructure.add("/* classStructure */\n");
+	    	this.methodTableStructure = new OutputList();	    	this.methodTableStructure.add("/* methodTableStructure */\n");
+	    	this.instanceStructure = new OutputList();	    		this.instanceStructure.add("/* instanceStructure */\n");
+	    	this.classStructureInitialization = new OutputList();	this.classStructureInitialization.add("/* classStructureInitialization */\n");
+	    	this.methodPrototypes = new OutputList();	    		this.methodPrototypes.add("/* methodPrototypes */\n");
+	    	this.methodTableInitialization = new OutputList();	    this.methodTableInitialization.add("/* methodTableInitialization */\n");
+	    	this.methodBodies = new OutputList();	    			this.methodBodies.add("/* methodBodies */\n");
+	    	this.classStructure = new OutputList();	    			this.classStructure.add("/* classStructure */\n");
+	    	this.instanceStructure = new OutputList();	    		this.instanceStructure.add("/* instanceStructure */\n");
+	    	this.methodBodies = new OutputList();	    			this.methodBodies.add("/* methodBodies */\n");
 	    	System.out.println("ClassDest "+symbol);
-	    	vtable.add("typedef struct ",symbol.getName(),"_obj *",symbol.getName(),";\n");
-	    	vtable.add("struct ",symbol.getName(),"_class"," {\n");
-	    	instance.add("struct ",symbol.getName(),"_obj"," {\n");
 		}
 		public ClassSymbol getSymbol() {
 			return symbol;
@@ -120,14 +142,16 @@ public class GeneratePass extends MJBaseListener {
  		}
  		
 		public ClassDest close() {
-	    	vtable.add("};\n");
-	    	instance.add("};\n");
 			String fileName = getFileName()+".c";
 			try {
 				outStream = new PrintStream(outputDir == null ? new File(fileName) : new File(outputDir,fileName));
-				vtable.print(outStream);
-				instance.print(outStream);
-				methods.print(outStream);
+		    	classStructure.print(outStream);
+		    	methodTableStructure.print(outStream);
+		    	instanceStructure.print(outStream);
+		    	classStructureInitialization.print(outStream);
+		    	methodPrototypes.print(outStream);
+		    	methodTableInitialization.print(outStream);
+		    	methodBodies.print(outStream);
 				outStream.close();
 			} catch (FileNotFoundException excp) {
 				Compiler.error(null,"Unable to open "+fileName);
@@ -136,29 +160,70 @@ public class GeneratePass extends MJBaseListener {
 		}
     }
     ClassDest currDest = null;
+    static String indent = "    ";
 
 	@Override public void exitCompilationUnit(MJParser.CompilationUnitContext ctx) { }
 	@Override public void exitTypeDeclaration(MJParser.TypeDeclarationContext ctx) { }
 	@Override public void exitModifier(MJParser.ModifierContext ctx) { }
 	@Override public void exitClassOrInterfaceModifier(MJParser.ClassOrInterfaceModifierContext ctx) { }
 	@Override public void enterClassDeclaration(MJParser.ClassDeclarationContext ctx) {
-		Symbol sym = symbols.get(ctx);
-		currDest = new ClassDest((ClassSymbol)symbols.get(ctx), currDest);
+		Symbol classSymbol = symbols.get(ctx);
+		String className = classSymbol.getName();
+    	String superName = null;
 		MJParser.TypeContext sup = ctx.type();
 		if (sup != null) {
 			Type t = getType(sup);
 		    if (t instanceof ClassSymbol) {
-		    	currDest.vtable.add("struct ",t.getName(),"_class"," super;\n");
-		    	currDest.instance.add("struct ",t.getName(),"_class"," *_class;\n");
-		    	currDest.instance.add("struct ",t.getName(),"_obj"," super;\n");
+		    	superName = t.getName();
+		    } else {
+		    	superName = "Unknown";
 		    }
 		} else {
-	    	currDest.vtable.add("struct Object_class super;\n");
-	    	currDest.instance.add("struct Object_class"," *_class;\n");
-	    	currDest.instance.add("struct Object_obj super;\n");
+			superName = "Object";
 		}
+		currDest = new ClassDest((ClassSymbol)symbols.get(ctx), currDest);
+		currDest.classStructure.add("#ifndef ",className,"_DEFN\n");
+		currDest.classStructure.add("#define ",className,"_DEFN\n");
+		currDest.classStructure.add("typedef struct ",className,"_obj *",className,";\n");
+		currDest.classStructure.add("struct ",className,"_class_s"," {\n");
+		currDest.methodTableStructure.add("struct ",className,"_methods_s"," {\n");
+		currDest.methodTableStructure.add(indent).add("size_t _objSize");
+		currDest.instanceStructure.add("struct ",className,"_obj"," {\n");
+		currDest.classStructureInitialization.add("#ifndef ",className,"_IMPL\n");
+		currDest.classStructureInitialization.add("extern struct ",className,"_class_s"," ",className,"_class",";\n");
+		currDest.classStructureInitialization.add("extern struct ",className,"_methods_s"," ",className,"_methods",";\n");
+		currDest.classStructureInitialization.add("#else\n");
+		currDest.classStructureInitialization.add("struct ",className,"_class_s"," ",className,"_class"," = {\n");
+		currDest.methodTableInitialization.add("struct ",className,"_methods_s"," ",className,"_methods"," = {\n");
+		currDest.methodTableInitialization.add(indent).add("sizeof(struct ",className,"_obj)");
+		currDest.classStructure.add(indent).add("struct ",superName,"_class_s"," _super;\n");
+    	currDest.instanceStructure.add(indent).add("struct ",className,"_methods_s"," *_methods;\n");
+    	currDest.instanceStructure.add(indent).add("struct ",superName,"_obj"," _super;\n");
+		Scope encl = ((ClassSymbol)classSymbol).getEnclosingScope();
 	}
 	@Override public void exitClassDeclaration(MJParser.ClassDeclarationContext ctx) {
+		ClassSymbol classSymbol = (ClassSymbol)symbols.get(ctx);
+		String className = classSymbol.getName();
+		if (!currDest.haveConstructor) {
+			// Define a default constructor
+	    	Token token = classSymbol.getToken();
+			MethodSymbol method = new MethodSymbol(token, classSymbol);
+			classSymbol.define(method);
+			method.setType(VoidType.getInstance());
+			beginMethod(method);
+			beginFormalParameters(className);
+			endFormalParameters();
+			beginBlock();
+			endBlock();
+			endMethod();			
+		}
+		currDest.classStructure.add("};\n");
+		currDest.instanceStructure.add("};\n");
+		currDest.methodTableStructure.add("\n};\n");
+		currDest.classStructureInitialization.add("\n};\n");
+		currDest.methodTableInitialization.add("\n};\n");
+		currDest.methodBodies.add("#endif /*",className,"_IMPL*/\n");
+		currDest.methodBodies.add("#endif /*",className,"_DEFN*/\n");
 		currDest = currDest.close();
 	}
 	@Override public void exitClassBody(MJParser.ClassBodyContext ctx) { }
@@ -167,26 +232,47 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitEmptyClassBodyDeclaration(MJParser.EmptyClassBodyDeclarationContext ctx) { }
 	@Override public void exitMemberDeclaration(MJParser.MemberDeclarationContext ctx) { }
 	@Override public void enterMethodDeclaration(MJParser.MethodDeclarationContext ctx) {
-		Symbol sym = symbols.get(ctx);
-		currDest.vtable.add(typeName("(*"+sym.getName()+")", sym.getType()));
-		currDest.methods.add(typeName(sym.getName()+"_"+currDest.getSymbol().getName(), sym.getType()));
+		beginMethod(symbols.get(ctx));
 	}
 	@Override public void exitMethodDeclaration(MJParser.MethodDeclarationContext ctx) {
-		currDest.vtable.add(";\n");
-		currDest.methods.add("\n");
+		endMethod();
 	}
-	@Override public void exitConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) { }
+
+	private void beginMethod(Symbol sym) {
+		String methodName = sym.getName();
+		Type returnType = sym.getType();
+		currDest.methodTableStructure.add(",\n").add(indent).add(typeName("(*"+methodName+")", returnType));
+		String qualName = currDest.getSymbol().getName()+"_"+methodName;
+		currDest.methodPrototypes.add(typeName(qualName, returnType));
+		currDest.methodTableInitialization.add(",\n").add(indent).add("&",qualName);
+		currDest.methodBodies.add(typeName(qualName, returnType));
+	}
+	private void endMethod() {
+		//nothing for currDest.methodTableStructure
+		currDest.methodPrototypes.add(";\n");
+		//nothing for currDest.methodTableInitialization
+		currDest.methodBodies.add("\n");
+	}
+
+	@Override public void enterConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) {
+		beginMethod(symbols.get(ctx));
+		currDest.haveConstructor = true;
+	}
+	@Override public void exitConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) {
+		endMethod();
+	}
 	@Override public void enterFieldDeclaration(MJParser.FieldDeclarationContext ctx) {
+		//LATER could order fields by descending alignment
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
 			Symbol sym = symbols.get(vd.variableDeclaratorId());
-			currDest.instance.add(typeName(sym.getName(), sym.getType())).add(";\n");			
+			currDest.instanceStructure.add(indent).add(typeName(sym.getName(), sym.getType())).add(";\n");			
 		}
 	}
 	@Override public void exitFieldDeclaration(MJParser.FieldDeclarationContext ctx) {
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
 			Symbol sym = symbols.get(vd.variableDeclaratorId());
 			if (vd.variableInitializer() != null) {
-				currDest.methods.add(sym.getName(),"=").add(rands.get(vd.variableInitializer())).add(";\n");
+				currDest.methodBodies.add(indent).add(sym.getName(),"=").add(rands.get(vd.variableInitializer())).add(";\n");
 				//TODO should be in constructor/initializer
 			}
 		}
@@ -232,18 +318,32 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitByteType(MJParser.ByteTypeContext ctx) { }
 	@Override public void exitLongType(MJParser.LongTypeContext ctx) { }
 	@Override public void enterFormalParameters(MJParser.FormalParametersContext ctx) {
-		currDest.vtable.add("(",currDest.getSymbol().getName()," ","this");
-		currDest.methods.add("(",currDest.getSymbol().getName()," ","this");
+		String className = currDest.getSymbol().getName();
+		beginFormalParameters(className);
 	}
 	@Override public void exitFormalParameters(MJParser.FormalParametersContext ctx) {
-		currDest.vtable.add(")");
-		currDest.methods.add(") ");
+		endFormalParameters();
 	}
+
+	private void beginFormalParameters(String className) {
+		currDest.methodTableStructure.add("(",className," ","this");
+		currDest.methodPrototypes.add("(",className," ","this");
+		currDest.methodBodies.add("(",className," ","this");
+	}
+	private void endFormalParameters() {
+		currDest.methodTableStructure.add(")");
+		currDest.methodPrototypes.add(")");
+		currDest.methodBodies.add(") ");
+	}
+	
 	@Override public void exitFormalParameterList(MJParser.FormalParameterListContext ctx) { }
 	@Override public void enterFormalParameter(MJParser.FormalParameterContext ctx) {
 		Symbol sym = symbols.get(ctx.variableDeclaratorId());
-		currDest.vtable.add(", ").add(typeName(sym.getName(), sym.getType()));			
-		currDest.methods.add(", ").add(typeName(sym.getName(), sym.getType()));			
+		String symName = sym.getName();
+		Type symType = sym.getType();
+		currDest.methodTableStructure.add(", ").add(typeName(symName, symType));			
+		currDest.methodPrototypes.add(", ").add(typeName(symName, symType));			
+		currDest.methodBodies.add(", ").add(typeName(symName, symType));			
 	}
 	@Override public void exitVariableModifier(MJParser.VariableModifierContext ctx) { }
 	@Override public void exitMethodBody(MJParser.MethodBodyContext ctx) { }
@@ -276,30 +376,38 @@ public class GeneratePass extends MJBaseListener {
 		setType(ctx, t);
 	}
 	@Override public void enterBlock(MJParser.BlockContext ctx) {
-		currDest.methods.add("{\n");
+		beginBlock();
 	}
 	@Override public void exitBlock(MJParser.BlockContext ctx) {
-		currDest.methods.add("}\n");
+		endBlock();
 	}
+
+	private void beginBlock() {
+		currDest.methodBodies.add("{\n");
+	}
+	private void endBlock() {
+		currDest.methodBodies.add("}\n");
+	}
+
 	@Override public void exitBlockStatement(MJParser.BlockStatementContext ctx) { }
 	@Override public void exitLocalVariableDeclarationStatement(MJParser.LocalVariableDeclarationStatementContext ctx) { }
 	@Override public void enterLocalVariableDeclaration(MJParser.LocalVariableDeclarationContext ctx) {
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
 			Symbol sym = symbols.get(vd.variableDeclaratorId());
-			currDest.methods.add(typeName(sym.getName(), sym.getType())).add(";\n");
+			currDest.methodBodies.add(indent).add(typeName(sym.getName(), sym.getType())).add(";\n");
 		}
 	}
 	@Override public void exitLocalVariableDeclaration(MJParser.LocalVariableDeclarationContext ctx) {
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
 			Symbol sym = symbols.get(vd.variableDeclaratorId());
 			if (vd.variableInitializer() != null) {
-				currDest.methods.add(sym.getName(),"=").add(rands.get(vd.variableInitializer())).add(";\n");				
+				currDest.methodBodies.add(indent).add(sym.getName(),"=").add(rands.get(vd.variableInitializer())).add(";\n");				
 			}
 		}
 	}
 	@Override public void exitWhileStatement(MJParser.WhileStatementContext ctx) { }
 	@Override public void enterExpressionStatement(MJParser.ExpressionStatementContext ctx) {
-		currDest.methods.add("// ",Integer.toString(ctx.getStart().getLine()),": ",ctx.getText(),"\n");
+		currDest.methodBodies.add("// ",Integer.toString(ctx.getStart().getLine()),": ",ctx.getText(),"\n");
 	}
 	@Override public void exitExpressionStatement(MJParser.ExpressionStatementContext ctx) { }
 	@Override public void exitEmnptyStatement(MJParser.EmnptyStatementContext ctx) { }
@@ -326,7 +434,7 @@ public class GeneratePass extends MJBaseListener {
 		Type typeRight = getType(right);
 		Type typeResult = leftType;  //TODO determine result type
 		String rand = "_e"+nextreg();
-		currDest.methods.add(typeName(rand,typeResult)).add("=").add(rands.get(left)).add(op).add(rands.get(right)).add(";\n");
+		currDest.methodBodies.add(indent).add(typeName(rand,typeResult)).add("=").add(rands.get(left)).add(op).add(rands.get(right)).add(";\n");
 		rands.put(ctx, new OutputAtom(rand));
 	}
 
@@ -346,14 +454,14 @@ public class GeneratePass extends MJBaseListener {
 		if (!(type instanceof PrimitiveType || type instanceof ClassSymbol)) {
 			Compiler.error(dest.getStop(), "not an assignable value","AssignExpression");
 		}
-		currDest.methods.add(rands.get(dest)).add("=").add(rands.get(val)).add(";\n");
+		currDest.methodBodies.add(indent).add(rands.get(dest)).add("=").add(rands.get(val)).add(";\n");
 		rands.put(ctx, rands.get(dest));
 	}
 	@Override public void exitNotExpression(MJParser.NotExpressionContext ctx) { }
 	@Override public void enterCallExpression(MJParser.CallExpressionContext ctx) {	}
 	@Override public void exitCallExpression(MJParser.CallExpressionContext ctx) {
 		MJParser.ExpressionContext exp = ctx.expression();
-		System.out.println("exitCallExpression method");  printContextTree(exp,"    ");
+		//System.out.println("exitCallExpression method");  printContextTree(exp,"    ");
 		Symbol sym = symbols.get(exp);
 		if (sym == null) {
 			Compiler.error(exp.getStop(), exp.getText()+" is not a method","CallExpression");
@@ -367,18 +475,20 @@ public class GeneratePass extends MJBaseListener {
 		Type type = sym.getType();  //getType(ctx.expression());
 		if (!(type instanceof VoidType)) {
 			String rand = "_e"+nextreg();
-			currDest.methods.add(typeName(rand,type)).add("=");
+			currDest.methodBodies.add(indent).add(typeName(rand,type)).add("=");
 			rands.put(ctx, new OutputAtom(rand));
+		} else {
+			currDest.methodBodies.add(indent);
 		}
-		currDest.methods.add(method); // includes the (
+		currDest.methodBodies.add(method); // includes the (
 		MJParser.ExpressionListContext argList = ctx.expressionList();
 		if (argList != null) {
 			for (MJParser.ExpressionContext arg : argList.expression()) {
-				currDest.methods.add(",").add(rands.get(arg));
+				currDest.methodBodies.add(",").add(rands.get(arg));
 			}
 		}
 		setType(ctx, type);
-		currDest.methods.add(");\n");
+		currDest.methodBodies.add(");\n");
 	}
 	@Override public void exitOrExpression(MJParser.OrExpressionContext ctx) {
 		//TODO types
@@ -426,13 +536,17 @@ public class GeneratePass extends MJBaseListener {
 		if (sym != null && sym instanceof MethodSymbol) {
 			setType(ctx, (MethodSymbol)sym);  // let method be a pseudo-type until called
 			//TODO handle static method
-			ref.add(rands.get(exp)).add("->_class->").add(name).add("(").add(rands.get(exp));			
+			checkRef(ref, rands.get(exp)).add("->_methods->").add(name).add("(").add(rands.get(exp));			
 		} else {
 			setType(ctx, type);
-			ref.add(rands.get(exp)).add("->").add(name);
+			checkRef(ref, rands.get(exp)).add("->").add(name);
 		}
 		symbols.put(ctx, sym);
 		rands.put(ctx, ref);
+	}
+
+	private OutputList checkRef(OutputList out, OutputItem ref) {
+		return out.add("((").add(ref).add(")?(").add(ref).add("):throwNPE())");
 	}
 	@Override public void exitShiftExpression(MJParser.ShiftExpressionContext ctx) { }
 	@Override public void exitPlusExpression(MJParser.PlusExpressionContext ctx) { }
@@ -444,30 +558,32 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitSuperPrimary(MJParser.SuperPrimaryContext ctx) { }
 	@Override public void exitIdentifierPrimary(MJParser.IdentifierPrimaryContext ctx) {
         Symbol sym = symbols.get(ctx);
-		Type t = null;
+		Type symType = null;
         if (sym != null) {
-        	t = sym.getType();
-    		System.out.println(sym.getName()+" type "+t);
-            setType(ctx, t);
+    		String symName = sym.getName();
+        	symType = sym.getType();
+			System.out.println(symName+" type "+symType);
+            setType(ctx, symType);
             Scope scope = sym.getScope();
             OutputItem access = null;
             if (scope instanceof BaseScope || scope instanceof MethodSymbol) {
-            	access = new OutputAtom(sym.getName());
+            	access = new OutputAtom(symName);
             } else if (scope instanceof ClassSymbol) {
             	access = new OutputList();
         		if (sym != null && sym instanceof MethodSymbol) {
-        			((OutputList)access).add("this->_class->",sym.getName()).add("(").add("this");
+        			// "this" doesn't need a null pointer check
+        			((OutputList)access).add("this->_methods->",symName).add("(").add("this");
         			setType(ctx, (MethodSymbol)sym);  // doesn't have result type until called
         		} else {
-        			((OutputList)access).add("this->",sym.getName());
+        			((OutputList)access).add("this->",symName);
         		}
             } else {
             	System.out.println("exitIdentifierPrimary scope is "+scope.getClass().getSimpleName());
             }
             rands.put(ctx, access);
         } else {
-	        if (t == null) t = UnknownType.getInstance();
-	        setType(ctx, t);
+	        if (symType == null) symType = UnknownType.getInstance();
+	        setType(ctx, symType);
 			rands.put(ctx, new OutputAtom("_unknown"));
         }
 	}
