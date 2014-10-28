@@ -1,3 +1,0 @@
-class Object {
-	Class getClass() native
-}

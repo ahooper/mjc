@@ -1,4 +1,4 @@
-public class Object {
+public class Object extends _NULL_ {
 
   public Object() {}
 
@@ -14,10 +14,9 @@ public class Object {
     return getClass().getName() + '@' + Integer.toHexString(hashCode());
   }
 
-  protected void finalize() throws Throwable {
+  protected void finalize() /*throws Throwable*/ {
   }
 
-  public final Class getClass() {
-    return VMObject.getClass(this);
-  }
+  public /*final*/ Class getClass() native;
+  
 }

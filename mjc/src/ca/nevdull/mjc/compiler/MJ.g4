@@ -79,7 +79,7 @@ methodDeclaration
     :   (type|VOID) Identifier formalParameters arrayDimension
         (   methodBody
         |   ';'
-        |	'native'
+        |	NATIVE ';'			/* non-standard */
         )
     ;
 
@@ -114,8 +114,8 @@ arrayInitializer
     ;
 
 type
-    :   classOrInterfaceType arrayDimension				# objectType
-    |   primitiveType arrayDimension					# primitType
+    :   classOrInterfaceType arrayDimension			# objectType
+    |   primitiveType arrayDimension				# primitType
     ;
     
 arrayDimension
@@ -252,7 +252,8 @@ primary
     ;
 
 creator
-    :   createdName (arrayCreatorRest | classCreatorRest)
+    :   createdName arrayCreatorRest				# arrayCreator
+    |	createdName classCreatorRest				# classCreator
     ;
 
 createdName

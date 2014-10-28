@@ -21,6 +21,11 @@ public abstract class ScopingSymbol extends Symbol {
 		this.enclosingScope = enclosingScope;
 	}
 
+	public ScopingSymbol(String nameString, Scope enclosingScope) {
+		super(nameString);
+		this.enclosingScope = enclosingScope;
+	}
+
 	public String getScopeName() {
 		return name;
 	}
@@ -36,6 +41,11 @@ public abstract class ScopingSymbol extends Symbol {
     public abstract Map<String, Symbol> getMembers();
     
 	public void define(Symbol sym) {
+        Symbol s = getMembers().get(sym.name);
+        if (s != null) {
+        	Compiler.error(sym.token, sym.name+" previously defined in scope "+this.getScopeName());
+        	// TODO mark symbols as duplicate definition
+        }
 		getMembers().put(sym.name, sym);
         sym.scope = (Scope) this; // track the scope in each symbol
 	}

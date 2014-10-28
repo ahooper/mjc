@@ -1,0 +1,21 @@
+public class String {
+
+  char[] value;
+  int count;
+  int offset;
+  
+  public String()
+  {
+    value = "".value;
+    offset = 0;
+    count = 0;
+  }
+  
+  public String(String str)
+  {
+    value = str.value;
+    offset = str.offset;
+    count = str.count;
+  }
+
+}

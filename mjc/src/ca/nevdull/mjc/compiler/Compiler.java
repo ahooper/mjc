@@ -73,6 +73,7 @@ System.err.flush();
     public void process(String[] args) throws Exception {
         if ( args.length>0 ) {
         	for (String inFileName : args) {
+        		if (args.length > 1) System.out.println(inFileName);
     			File inputFile = new File(inFileName);
     			File dir = inputFile.getParentFile();
     	        process1(new FileInputStream(inputFile), dir);

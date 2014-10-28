@@ -34,6 +34,8 @@ public class DefinitionPass extends MJBaseListener {
     public void enterCompilationUnit(@NotNull MJParser.CompilationUnitContext ctx) {
         globals = new GlobalScope();
         //TODO define globals - Object, Class, String
+		ClassSymbol nullClass = new ClassSymbol("_NULL_", globals, null);
+		globals.define(nullClass);
         currentScope = globals;
      }
 
@@ -88,13 +90,14 @@ public class DefinitionPass extends MJBaseListener {
 	public void enterConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) {
     	Token token = ctx.Identifier().getSymbol();
         String name = token.getText();
-        Scope refScope = scopes.get(ctx).getEnclosingScope();
-        Symbol sym = refScope.resolve(name);
-        if (sym != refScope) {
-        	Compiler.error(token, name+" is not the class name","ConstructorDeclaration");
+        Symbol sym = currentScope.resolve(name);
+        if (sym != currentScope) {
+        	Compiler.error(token, name+" is not the class name "+currentScope.getScopeName(),"ConstructorDeclaration");
         }
+        assert currentScope instanceof ClassSymbol;
 		MethodSymbol method = new MethodSymbol(token, currentScope);
-		currentScope.define(method);
+        saveSymbol(ctx, method);
+		((ClassSymbol)currentScope).setConstructor(method);
         currentScope = method;
         saveScope(ctx, currentScope);  //TODO is this needed/used?
 	}
@@ -181,6 +184,11 @@ public class DefinitionPass extends MJBaseListener {
 	
 	@Override
 	public void enterThisPrimary(@NotNull MJParser.ThisPrimaryContext ctx) {
+		saveScope(ctx, currentScope); // save for ReferencePass
+	}
+	
+	@Override
+	public void exitCreatedName(MJParser.CreatedNameContext ctx) {
 		saveScope(ctx, currentScope); // save for ReferencePass
 	}
 

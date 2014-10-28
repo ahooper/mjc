@@ -8,6 +8,8 @@ import org.antlr.v4.runtime.misc.NotNull;
 import org.antlr.v4.runtime.tree.ParseTreeProperty;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
+import ca.nevdull.mjc.compiler.MJParser.PrimitiveTypeContext;
+
 public class ReferencePass extends MJBaseListener {
     ParseTreeProperty<Scope> scopes;
     GlobalScope globals;
@@ -47,8 +49,13 @@ public class ReferencePass extends MJBaseListener {
 		if (ctx.type() != null) {
 			Type t = getType(ctx.type());
 			if (t instanceof ClassSymbol) {
-				klass.setSuperClass((ClassSymbol)t);
-				System.out.println(klass.getName()+" super class is "+t.toString());
+				if (t.getName().equals("_NULL_")) {
+					//no superclass for Object
+					System.out.println(klass.getName()+" has no super class");
+				} else {
+					klass.setSuperClass((ClassSymbol)t);
+					System.out.println(klass.getName()+" super class is "+t.toString());
+				}
 			} else {
 				Compiler.error(ctx.Identifier().getSymbol(), " super must be a class");
 			}
@@ -264,7 +271,7 @@ public class ReferencePass extends MJBaseListener {
         	if (   refScope instanceof BaseScope
         		&& defScope instanceof BaseScope
         		&& refLocation < defLocation ) {
-        		Compiler.error(token, name+" is forward local variable reference");
+        		Compiler.error(token, name+" is forward local variable reference","IdentifierPrimary");
         		sym = null;
         	} else {
         		symbols.put(ctx, sym);
@@ -274,8 +281,32 @@ public class ReferencePass extends MJBaseListener {
 	@Override public void exitThisPrimary(MJParser.ThisPrimaryContext ctx) { }
 	
 	@Override public void exitParenPrimary(MJParser.ParenPrimaryContext ctx) {	}
-	@Override public void exitCreator(MJParser.CreatorContext ctx) { }
-	@Override public void exitCreatedName(MJParser.CreatedNameContext ctx) { }
+	@Override public void exitArrayCreator(MJParser.ArrayCreatorContext ctx) { }
+	@Override public void exitClassCreator(MJParser.ClassCreatorContext ctx) { }
+	@Override public void exitCreatedName(MJParser.CreatedNameContext ctx) {
+        PrimitiveTypeContext ptc = ctx.primitiveType();
+        if (ptc != null) {
+        	setType(ctx, getType(ctx.primitiveType()));
+		} else {
+	        Scope refScope = scopes.get(ctx);
+			Symbol sym = null;
+			for (TerminalNode id : ctx.Identifier()) {
+		    	Token token = id.getSymbol();
+		        String name = token.getText();
+		        sym = refScope.resolve(name);
+		        if (sym == null) {
+		        	Compiler.error(token, name+" is not defined","CreatedName");
+		        } else if (sym instanceof ScopingSymbol) {
+		        	refScope = (Scope)sym;
+		        }
+			}
+			if (sym instanceof ClassSymbol) {
+	    		symbols.put(ctx, sym);
+			} else {
+	        	Compiler.error(sym.getToken(), sym.getName()+" is not a class","CreatedName");
+			}
+		}
+	}
 	@Override public void exitArrayCreatorRest(MJParser.ArrayCreatorRestContext ctx) { }
 	@Override public void exitClassCreatorRest(MJParser.ClassCreatorRestContext ctx) { }
 	@Override public void exitArguments(MJParser.ArgumentsContext ctx) { }

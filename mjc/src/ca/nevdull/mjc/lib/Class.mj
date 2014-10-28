@@ -1,11 +1,7 @@
 class Class {
 
-  public String getName() { 
-    return VMClass.getName (this);
-  }
+  public String getName() native;
   
-  public Class getSuperclass() {
-    return VMClass.getSuperclass (this);
-  }
+  public Class getSuperclass() native;
   
 }

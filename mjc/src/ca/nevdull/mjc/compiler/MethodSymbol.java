@@ -27,7 +27,7 @@ public class MethodSymbol extends ScopingSymbol implements Scope, Type {
 	}
 
     public String toString() {
-    	return "method "+getScopeName()+":"+parameters.values()+":"+getType();
+    	return "method "+getScopeName();//+":"+parameters.values();//+":"+getType();
     }
 
 	@Override

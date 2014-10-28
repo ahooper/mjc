@@ -17,14 +17,32 @@ import org.antlr.v4.runtime.Token;
 public class ClassSymbol extends ScopingSymbol implements Scope, Type {
 	ClassSymbol superClass;
     Map<String, Symbol> members = new LinkedHashMap<String, Symbol>();
+    MethodSymbol constructor = null;
 
 	public ClassSymbol(Token nameToken, Scope enclosingScope, ClassSymbol superClass) {
 		super(nameToken, enclosingScope);
 		this.superClass = superClass;
 	}
 
+	public ClassSymbol(String nameString, Scope enclosingScope, ClassSymbol superClass) {
+		super(nameString, enclosingScope);
+		this.superClass = superClass;
+	}
+
+	public ClassSymbol getSuperClass() {
+		return superClass;
+	}
+
 	public void setSuperClass(ClassSymbol superClass) {
 		this.superClass = superClass;
+	}
+
+	public MethodSymbol getConstructor() {
+		return constructor;
+	}
+
+	public void setConstructor(MethodSymbol method) {
+		this.constructor = method;
 	}
 
 	@Override

@@ -109,27 +109,19 @@ public class GeneratePass extends MJBaseListener {
     	ClassDest enclosingClass;
     	boolean haveConstructor = false;
     	OutputList classStructure;
-    	OutputList methodTableStructure;
     	OutputList instanceStructure;
-    	OutputList classStructureInitialization;
-    	OutputList methodPrototypes;
-    	OutputList methodTableInitialization;
     	OutputList methodBodies;
-    	PrintStream outStream;
+    	OutputList classDefinition;
+    	OutputList staticInitialization;
  		public ClassDest(ClassSymbol symbol, ClassDest enclosingClass) {
 			super();
 			this.symbol = symbol;
 			this.enclosingClass = enclosingClass;
-			this.classStructure = new OutputList();					this.classStructure.add("/* classStructure */\n");
-	    	this.methodTableStructure = new OutputList();	    	this.methodTableStructure.add("/* methodTableStructure */\n");
-	    	this.instanceStructure = new OutputList();	    		this.instanceStructure.add("/* instanceStructure */\n");
-	    	this.classStructureInitialization = new OutputList();	this.classStructureInitialization.add("/* classStructureInitialization */\n");
-	    	this.methodPrototypes = new OutputList();	    		this.methodPrototypes.add("/* methodPrototypes */\n");
-	    	this.methodTableInitialization = new OutputList();	    this.methodTableInitialization.add("/* methodTableInitialization */\n");
-	    	this.methodBodies = new OutputList();	    			this.methodBodies.add("/* methodBodies */\n");
-	    	this.classStructure = new OutputList();	    			this.classStructure.add("/* classStructure */\n");
-	    	this.instanceStructure = new OutputList();	    		this.instanceStructure.add("/* instanceStructure */\n");
-	    	this.methodBodies = new OutputList();	    			this.methodBodies.add("/* methodBodies */\n");
+			this.classStructure = new OutputList();					//this.classStructure.add("/* classStructure */\n");
+	    	this.instanceStructure = new OutputList();	    		//this.instanceStructure.add("/* instanceStructure */\n");
+	    	this.methodBodies = new OutputList();	    			//this.methodBodies.add("/* methodBodies */\n");
+	    	this.classDefinition = new OutputList();				//this.classDefinition.add("/* classDefinition */\n");
+	    	this.staticInitialization = new OutputList();			//this.staticInitialization.add("/* staticInitialization */\n");
 	    	System.out.println("ClassDest "+symbol);
 		}
 		public ClassSymbol getSymbol() {
@@ -140,21 +132,29 @@ public class GeneratePass extends MJBaseListener {
 			if (enclosingClass == null) return thisName;
 			return enclosingClass.getFileName()+"$"+thisName;
  		}
+
+		private File makeFilePath(String suffix) {
+			String name = getFileName()+suffix;
+			return outputDir == null ? new File(name)
+									 : new File(outputDir,name);
+		}
  		
 		public ClassDest close() {
-			String fileName = getFileName()+".c";
+			PrintStream defnStream = null;
+			PrintStream implStream = null;
 			try {
-				outStream = new PrintStream(outputDir == null ? new File(fileName) : new File(outputDir,fileName));
-		    	classStructure.print(outStream);
-		    	methodTableStructure.print(outStream);
-		    	instanceStructure.print(outStream);
-		    	classStructureInitialization.print(outStream);
-		    	methodPrototypes.print(outStream);
-		    	methodTableInitialization.print(outStream);
-		    	methodBodies.print(outStream);
-				outStream.close();
+		    	defnStream = new PrintStream(makeFilePath(".h"));
+		    	implStream = new PrintStream(makeFilePath(".c"));
+		    	classStructure.print(defnStream);
+		    	instanceStructure.print(defnStream);
+		    	methodBodies.print(implStream);
+		    	classDefinition.print(implStream);
+		    	//staticInitialization is incorporated by defineCreator
 			} catch (FileNotFoundException excp) {
-				Compiler.error(null,"Unable to open "+fileName);
+				Compiler.error(null,"Unable to open "+excp.getMessage());
+			} finally {
+				if (defnStream != null) defnStream.close();
+				if (implStream != null) implStream.close();
 			}
 			return enclosingClass;
 		}
@@ -170,61 +170,91 @@ public class GeneratePass extends MJBaseListener {
 		Symbol classSymbol = symbols.get(ctx);
 		String className = classSymbol.getName();
     	String superName = null;
-		MJParser.TypeContext sup = ctx.type();
+		ClassSymbol sup = ((ClassSymbol)classSymbol).getSuperClass();
 		if (sup != null) {
-			Type t = getType(sup);
-		    if (t instanceof ClassSymbol) {
-		    	superName = t.getName();
-		    } else {
-		    	superName = "Unknown";
-		    }
-		} else {
-			superName = "Object";
+	    	superName = sup.getName();
 		}
 		currDest = new ClassDest((ClassSymbol)symbols.get(ctx), currDest);
+		
 		currDest.classStructure.add("#ifndef ",className,"_DEFN\n");
-		currDest.classStructure.add("#define ",className,"_DEFN\n");
+		currDest.classStructure.add("#define ",className,"_DEFN\n\n");
+		currDest.classStructure.add("#include \"mj.h\"\n\n");
+		if (superName != null) currDest.classDefinition.add("#include \"",superName,".h\"\n\n");
 		currDest.classStructure.add("typedef struct ",className,"_obj *",className,";\n");
-		currDest.classStructure.add("struct ",className,"_class_s"," {\n");
-		currDest.methodTableStructure.add("struct ",className,"_methods_s"," {\n");
-		currDest.methodTableStructure.add(indent).add("size_t _objSize");
-		currDest.instanceStructure.add("struct ",className,"_obj"," {\n");
-		currDest.classStructureInitialization.add("#ifndef ",className,"_IMPL\n");
-		currDest.classStructureInitialization.add("extern struct ",className,"_class_s"," ",className,"_class",";\n");
-		currDest.classStructureInitialization.add("extern struct ",className,"_methods_s"," ",className,"_methods",";\n");
-		currDest.classStructureInitialization.add("#else\n");
-		currDest.classStructureInitialization.add("struct ",className,"_class_s"," ",className,"_class"," = {\n");
-		currDest.methodTableInitialization.add("struct ",className,"_methods_s"," ",className,"_methods"," = {\n");
-		currDest.methodTableInitialization.add(indent).add("sizeof(struct ",className,"_obj)");
-		currDest.classStructure.add(indent).add("struct ",superName,"_class_s"," _super;\n");
-    	currDest.instanceStructure.add(indent).add("struct ",className,"_methods_s"," *_methods;\n");
-    	currDest.instanceStructure.add(indent).add("struct ",superName,"_obj"," _super;\n");
+		currDest.classStructure.add("struct ",className,"_class_obj"," {\n");
+		currDest.classStructure.add(indent).add("struct Class_class_obj"," *_class;\n");
+		currDest.classStructure.add(indent).add("struct ",className,"_class_data"," {\n");
+		currDest.classStructure.add(indent,indent).add("struct /*Object_data*/{} _super;\n");
+		currDest.classStructure.add(indent,indent).add("Class _superclass;\n");
+		currDest.instanceStructure.add("struct ",className,"_data"," {\n");
+		if (superName != null) currDest.instanceStructure.add(indent).add("struct ",superName,"_data"," _super;\n");
+		
+		currDest.methodBodies.add("#include \"",className,".h\"\n\n");
+		if (superName != null) currDest.classDefinition.add("extern struct Class_class_obj ",superName,"_class",";\n");
+		currDest.classDefinition.add("struct ",className,"_class_obj"," ",className,"_class"," = {\n");
+		currDest.classDefinition.add(indent).add("._class = NULL,/*later &Class_class,*/\n");
+		currDest.classDefinition.add(indent).add("._data = {\n");
+		currDest.classDefinition.add(indent,indent).add("._super = {},\n");
+		if (superName != null) currDest.classDefinition.add(indent,indent).add("._superclass = ","&",superName,"_class",",\n");
+		else currDest.classDefinition.add(indent,indent).add("._superclass = NULL,\n");
+		
 		Scope encl = ((ClassSymbol)classSymbol).getEnclosingScope();
 	}
 	@Override public void exitClassDeclaration(MJParser.ClassDeclarationContext ctx) {
 		ClassSymbol classSymbol = (ClassSymbol)symbols.get(ctx);
 		String className = classSymbol.getName();
 		if (!currDest.haveConstructor) {
-			// Define a default constructor
-	    	Token token = classSymbol.getToken();
-			MethodSymbol method = new MethodSymbol(token, classSymbol);
-			classSymbol.define(method);
-			method.setType(VoidType.getInstance());
-			beginMethod(method);
-			beginFormalParameters(className);
-			endFormalParameters();
-			beginBlock();
-			endBlock();
-			endMethod();			
+			defineDefaultConstructor(classSymbol);			
 		}
+    	defineCreator(classSymbol);
+    	
+		currDest.classStructure.add(indent).add("} _data;\n");
 		currDest.classStructure.add("};\n");
+		currDest.classStructure.add("extern struct ",className,"_class_obj"," ",className,"_class",";\n\n");
 		currDest.instanceStructure.add("};\n");
-		currDest.methodTableStructure.add("\n};\n");
-		currDest.classStructureInitialization.add("\n};\n");
-		currDest.methodTableInitialization.add("\n};\n");
-		currDest.methodBodies.add("#endif /*",className,"_IMPL*/\n");
-		currDest.methodBodies.add("#endif /*",className,"_DEFN*/\n");
+		currDest.instanceStructure.add("struct ",className,"_obj"," {\n");
+		currDest.instanceStructure.add(indent).add("struct ",className,"_class_obj"," *_class;\n");
+		currDest.instanceStructure.add(indent).add("struct ",className,"_data"," _data;\n");
+		currDest.instanceStructure.add("};\n");
+		currDest.instanceStructure.add("\n#endif /*",className,"_DEFN*/\n");
+		
+		currDest.classDefinition.add(indent).add("}\n");
+		currDest.classDefinition.add("};\n");
+		
 		currDest = currDest.close();
+	}
+
+	private void defineDefaultConstructor(ClassSymbol classSymbol) {
+		Token token = classSymbol.getToken();
+		MethodSymbol method = new MethodSymbol(token, classSymbol);
+		classSymbol.define(method);
+		method.setType(VoidType.getInstance());
+		beginMethod(method.getName(), method.getType());
+		beginFormalParameters(classSymbol.getName());
+		endFormalParameters();
+		beginBlock();
+		endBlock();
+		endMethod();
+	}
+
+	private void defineCreator(ClassSymbol classSymbol) {
+		String className = classSymbol.getName();
+		//currDest.methodBodies.add("void *calloc(size_t nmemb, size_t size);\n");
+		//TODO should be a static method (no "this" parameter)
+		beginMethod("_create", classSymbol);
+		beginFormalParameters(className); //TODO eliminate formal parameter
+		endFormalParameters();
+		beginBlock();
+		currDest.methodBodies.add(indent).add("/* 'this' will always be NULL */\n");
+		currDest.methodBodies.add(indent).add("if (",className,"_class._class == NULL) ",className,"_class._class = Class_class_p;\n");
+		currDest.methodBodies.add(indent).add(className, " new;\n");
+		currDest.methodBodies.add(indent).add("new=calloc(1, sizeof *new);\n");
+		//TODO allocation exception
+		currDest.methodBodies.add(indent).add("new->_class=&",className,"_class;\n");
+		currDest.methodBodies.add(currDest.staticInitialization);
+		currDest.methodBodies.add(indent).add("return new;\n");
+		endBlock();
+		endMethod();
 	}
 	@Override public void exitClassBody(MJParser.ClassBodyContext ctx) { }
 	@Override public void exitMemberClassBodyDeclaration(MJParser.MemberClassBodyDeclarationContext ctx) { }
@@ -232,30 +262,41 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitEmptyClassBodyDeclaration(MJParser.EmptyClassBodyDeclarationContext ctx) { }
 	@Override public void exitMemberDeclaration(MJParser.MemberDeclarationContext ctx) { }
 	@Override public void enterMethodDeclaration(MJParser.MethodDeclarationContext ctx) {
-		beginMethod(symbols.get(ctx));
+		Symbol method = symbols.get(ctx);
+		if (ctx.methodBody() != null) {
+		} else if (ctx.NATIVE() != null) {
+			currDest.methodBodies.add("extern ");
+		} else {
+			// abstract
+			currDest.methodBodies.add("/*"); //TODO something less kuldgey!
+		}
+		beginMethod(method.getName(), method.getType());
 	}
 	@Override public void exitMethodDeclaration(MJParser.MethodDeclarationContext ctx) {
+		if (ctx.methodBody() != null) {
+		} else if (ctx.NATIVE() != null) {
+			currDest.methodBodies.add(";");
+		} else {
+			currDest.methodBodies.add("*/");
+		}
 		endMethod();
 	}
 
-	private void beginMethod(Symbol sym) {
-		String methodName = sym.getName();
-		Type returnType = sym.getType();
-		currDest.methodTableStructure.add(",\n").add(indent).add(typeName("(*"+methodName+")", returnType));
+	private void beginMethod(String methodName, Type returnType) {
+		currDest.classStructure.add(indent,indent).add(typeName("(*"+methodName+")", returnType));
 		String qualName = currDest.getSymbol().getName()+"_"+methodName;
-		currDest.methodPrototypes.add(typeName(qualName, returnType));
-		currDest.methodTableInitialization.add(",\n").add(indent).add("&",qualName);
+		currDest.classDefinition.add(indent,indent).add(".",methodName," = &",qualName).add(",\n");
 		currDest.methodBodies.add(typeName(qualName, returnType));
 	}
 	private void endMethod() {
-		//nothing for currDest.methodTableStructure
-		currDest.methodPrototypes.add(";\n");
-		//nothing for currDest.methodTableInitialization
+		currDest.classStructure.add(";\n");
+		//nothing for currDest.classInitialization
 		currDest.methodBodies.add("\n");
 	}
 
 	@Override public void enterConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) {
-		beginMethod(symbols.get(ctx));
+		Symbol method = symbols.get(ctx);
+		beginMethod(method.getName(), method.getType());
 		currDest.haveConstructor = true;
 	}
 	@Override public void exitConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) {
@@ -326,13 +367,11 @@ public class GeneratePass extends MJBaseListener {
 	}
 
 	private void beginFormalParameters(String className) {
-		currDest.methodTableStructure.add("(",className," ","this");
-		currDest.methodPrototypes.add("(",className," ","this");
+		currDest.classStructure.add("(",className," ","this");
 		currDest.methodBodies.add("(",className," ","this");
 	}
 	private void endFormalParameters() {
-		currDest.methodTableStructure.add(")");
-		currDest.methodPrototypes.add(")");
+		currDest.classStructure.add(")");
 		currDest.methodBodies.add(") ");
 	}
 	
@@ -341,8 +380,7 @@ public class GeneratePass extends MJBaseListener {
 		Symbol sym = symbols.get(ctx.variableDeclaratorId());
 		String symName = sym.getName();
 		Type symType = sym.getType();
-		currDest.methodTableStructure.add(", ").add(typeName(symName, symType));			
-		currDest.methodPrototypes.add(", ").add(typeName(symName, symType));			
+		currDest.classStructure.add(", ").add(typeName(symName, symType));			
 		currDest.methodBodies.add(", ").add(typeName(symName, symType));			
 	}
 	@Override public void exitVariableModifier(MJParser.VariableModifierContext ctx) { }
@@ -530,16 +568,17 @@ public class GeneratePass extends MJBaseListener {
         		type = sym.getType();
         	}
         } else if (!(type instanceof UnknownType)) {
-        	Compiler.error(token, "not a reference: "+type.toString(),"DotExpression");
+        	Compiler.error(token, "not a reference: "+type,"DotExpression");
         }
 		OutputList ref = new OutputList();
 		if (sym != null && sym instanceof MethodSymbol) {
 			setType(ctx, (MethodSymbol)sym);  // let method be a pseudo-type until called
 			//TODO handle static method
-			checkRef(ref, rands.get(exp)).add("->_methods->").add(name).add("(").add(rands.get(exp));			
+			ref.add("(*(");
+			checkRef(ref, rands.get(exp)).add("->_class->_data.").add(name).add("))(").add(rands.get(exp));			
 		} else {
 			setType(ctx, type);
-			checkRef(ref, rands.get(exp)).add("->").add(name);
+			checkRef(ref, rands.get(exp)).add("->_data.").add(name);
 		}
 		symbols.put(ctx, sym);
 		rands.put(ctx, ref);
@@ -550,7 +589,10 @@ public class GeneratePass extends MJBaseListener {
 	}
 	@Override public void exitShiftExpression(MJParser.ShiftExpressionContext ctx) { }
 	@Override public void exitPlusExpression(MJParser.PlusExpressionContext ctx) { }
-	@Override public void exitNewExpression(MJParser.NewExpressionContext ctx) { }
+	@Override public void exitNewExpression(MJParser.NewExpressionContext ctx) {
+		promoteType(ctx, ctx.creator());
+		rands.put(ctx, rands.get(ctx.creator()));
+	}
 	@Override public void exitLiteralPrimary(MJParser.LiteralPrimaryContext ctx) {
 		promoteType(ctx, ctx.literal());
 		rands.put(ctx, rands.get(ctx.literal()));
@@ -572,10 +614,10 @@ public class GeneratePass extends MJBaseListener {
             	access = new OutputList();
         		if (sym != null && sym instanceof MethodSymbol) {
         			// "this" doesn't need a null pointer check
-        			((OutputList)access).add("this->_methods->",symName).add("(").add("this");
+        			((OutputList)access).add("(*(this->_class->_data.",symName).add("))(").add("this");
         			setType(ctx, (MethodSymbol)sym);  // doesn't have result type until called
         		} else {
-        			((OutputList)access).add("this->",symName);
+        			((OutputList)access).add("this->_data.",symName);
         		}
             } else {
             	System.out.println("exitIdentifierPrimary scope is "+scope.getClass().getSimpleName());
@@ -596,11 +638,40 @@ public class GeneratePass extends MJBaseListener {
 		rands.put(ctx, rands.get(ctx.expression()));
 		symbols.put(ctx, symbols.get(ctx.expression()));
 	}
-	@Override public void exitCreator(MJParser.CreatorContext ctx) { }
+	@Override public void exitArrayCreator(MJParser.ArrayCreatorContext ctx) { }
+	@Override public void enterClassCreator(MJParser.ClassCreatorContext ctx) {
+		if (ctx.createdName().primitiveType() == null) {
+			// must be class type
+			Symbol sym = symbols.get(ctx.createdName());
+			Type symType = null;
+			if (sym != null && sym instanceof ClassSymbol) {
+				symType = (ClassSymbol)sym;
+			} else {
+				symType = UnknownType.getInstance();
+			}
+			System.out.println("ClassCreator "+sym+" type "+symType);
+			String rand = "_n"+nextreg();
+			System.out.println("ClassCreator"+sym);
+			currDest.methodBodies.add(indent).add(typeName(rand,symType)).add("=(*(",sym.getName(),"_class._data._create))(NULL);\n");			
+			currDest.methodBodies.add(indent).add("(*(",rand,"->_class->_data.",sym.getName(),"))(",rand);
+			MJParser.ExpressionListContext argList = ctx.classCreatorRest().arguments().expressionList();
+			if (argList != null) {
+				for (MJParser.ExpressionContext arg : argList.expression()) {
+					currDest.methodBodies.add(",").add(rands.get(arg));
+				}
+			}
+			currDest.methodBodies.add(");\n");
+			rands.put(ctx, new OutputAtom(rand));
+			setType(ctx, symType);
+		} else {
+			Compiler.error(ctx.getStart(), "new cannot be applied to a primitive type", "ClassCreator");
+		}
+	}
+	@Override public void exitClassCreator(MJParser.ClassCreatorContext ctx) { }
 	@Override public void exitCreatedName(MJParser.CreatedNameContext ctx) { }
 	@Override public void exitArrayCreatorRest(MJParser.ArrayCreatorRestContext ctx) { }
 	@Override public void exitClassCreatorRest(MJParser.ClassCreatorRestContext ctx) { }
+	@Override public void enterArguments(MJParser.ArgumentsContext ctx) { }
 	@Override public void exitArguments(MJParser.ArgumentsContext ctx) { }
-
 
 }
