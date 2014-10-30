@@ -10,7 +10,9 @@ package ca.nevdull.mjc.compiler;
 ***/
 public class GlobalScope extends BaseScope {
 	
-    public GlobalScope() {
+	private static final long serialVersionUID = 6219478179582888620L;
+
+	public GlobalScope() {
     	super(null);
     }
     

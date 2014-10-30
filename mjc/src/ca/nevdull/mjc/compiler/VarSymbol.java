@@ -4,6 +4,8 @@ import org.antlr.v4.runtime.Token;
 
 public class VarSymbol extends Symbol {
 
+	private static final long serialVersionUID = 4514522783018333957L;
+
 	public VarSymbol(Token nameToken, Type type) {
 		super(nameToken);
 		setType(type);

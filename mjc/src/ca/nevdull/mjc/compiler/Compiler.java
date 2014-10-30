@@ -12,6 +12,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
+
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
 public class Compiler {
 
@@ -57,10 +62,15 @@ System.err.flush();
 	        System.err.println();
 	    }
 	}
-	
-    public static void error(Token t, String msg) {
+
+	public static void error(Token t, String msg) {
         System.err.printf("line %d@%d %s\n", t.getLine(), t.getCharPositionInLine(),
                           msg);
+System.err.flush();
+    }
+	
+    public static void error(String msg) {
+        System.err.println(msg);
 System.err.flush();
     }
 	
@@ -71,26 +81,40 @@ System.err.flush();
     }
 
     public void process(String[] args) throws Exception {
-        if ( args.length>0 ) {
-        	for (String inFileName : args) {
-        		if (args.length > 1) System.out.println(inFileName);
-    			File inputFile = new File(inFileName);
-    			File dir = inputFile.getParentFile();
-    	        process1(new FileInputStream(inputFile), dir);
+    	
+    	// Options
+    	// http://pholser.github.io/jopt-simple/
+        OptionParser optParser = new OptionParser();
+        optParser.accepts(PassData.BOOTCLASSPATH_OPTION).withRequiredArg().ofType( String.class )
+        				.withValuesSeparatedBy(PassData.PATH_SEPARATOR_CHAR).defaultsTo( PassData.defaultBootClassPath );
+        optParser.accepts(PassData.CLASSPATH_OPTION).withRequiredArg().ofType( String.class )
+						.withValuesSeparatedBy(PassData.PATH_SEPARATOR_CHAR).defaultsTo( PassData.defaultClassPath );
+        OptionSpec<File> optFiles = optParser.nonOptions().ofType( File.class );
+        OptionSet options = optParser.parse(args);
+        
+        // Input files
+        List<File> fileNames = options.valuesOf(optFiles);
+        if ( !fileNames.isEmpty() ) {
+        	for (File inputFile : fileNames) {
+        		if (args.length > 1) System.out.println(inputFile);
+     			File inputDir = inputFile.getParentFile();
+    	        process1(options, new FileInputStream(inputFile), inputDir);
         	}
         } else {
-        	process1(System.in, null);
+        	process1(options, System.in, null);
         }
+        
     }
 	
 	private static final String DIVIDER = "\n------------------------------------------------------------\n";
 
 	/**
+	 * @param options 
 	 * @param is
 	 * @throws IOException
 	 * @throws RecognitionException
 	 */
-	public void process1(InputStream is, File outputDir) throws IOException,
+	public void process1(OptionSet options, InputStream is, File inputDir) throws IOException,
 			RecognitionException {
 		ANTLRInputStream input = new ANTLRInputStream(is);
         MJLexer lexer = new MJLexer(input);
@@ -104,13 +128,16 @@ System.err.flush();
         //System.out.println(tree.toStringTree(parser));
 
         ParseTreeWalker walker = new ParseTreeWalker();
-        DefinitionPass def = new DefinitionPass();
+        PassData passData = new PassData();
+        passData.options = options;
+        passData.inputDir = inputDir;
+        DefinitionPass def = new DefinitionPass(passData);
         walker.walk(def, tree);
         System.out.println(DIVIDER);
-        ReferencePass ref = new ReferencePass(def.scopes, def.globals, def.symbols);
+        ReferencePass ref = new ReferencePass(passData);
         walker.walk(ref, tree);
         System.out.println(DIVIDER);
-        GeneratePass gen = new GeneratePass(ref.symbols, ref.types, outputDir);
+        GeneratePass gen = new GeneratePass(passData);
         walker.walk(gen, tree);
 	}
 

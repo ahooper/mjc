@@ -14,7 +14,10 @@ import java.util.Map;
 
 import org.antlr.v4.runtime.Token;
 
-public class MethodSymbol extends ScopingSymbol implements Scope, Type {
+public class MethodSymbol extends ScopingSymbol implements Scope, Type, java.io.Serializable {
+
+	private static final long serialVersionUID = -1161057449253904470L;
+	
 	Map<String, Symbol> parameters = new LinkedHashMap<String, Symbol>();
 
 	public MethodSymbol(Token nameToken, Scope enclosingScope) {

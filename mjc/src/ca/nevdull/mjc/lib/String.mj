@@ -4,9 +4,11 @@ public class String {
   int count;
   int offset;
   
+  static char emptyStringValue[] = new char[0];
+  
   public String()
   {
-    value = "".value;
+    value = emptyStringValue;
     offset = 0;
     count = 0;
   }

@@ -1,18 +1,33 @@
 package ca.nevdull.mjc.compiler;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.misc.NotNull;
-import org.antlr.v4.runtime.tree.ParseTreeProperty;
+import org.antlr.v4.runtime.tree.TerminalNode;
 
 public class DefinitionPass extends MJBaseListener {
-    ParseTreeProperty<Scope> scopes = new ParseTreeProperty<Scope>();
-    GlobalScope globals;
+	PassData passData;
     Scope currentScope; // define symbols in this scope
-    ParseTreeProperty<Symbol> symbols = new ParseTreeProperty<Symbol>();
+    static String preloadClasses[] = {
+    			"Object",
+    			"Class",
+    			"String"
+    			};
+    
+    DefinitionPass(PassData passData) {
+    	super();
+    	this.passData = passData;
+    }
 
-    private void saveScope(ParserRuleContext ctx, Scope s) {
-    	scopes.put(ctx, s);
+	private void saveScope(ParserRuleContext ctx, Scope s) {
+    	passData.scopes.put(ctx, s);
     }
     
     private void popScope() {
@@ -21,30 +36,81 @@ public class DefinitionPass extends MJBaseListener {
     }
     
     private void saveSymbol(ParserRuleContext node, Symbol sym) {
-    	symbols.put(node, sym);
+    	passData.symbols.put(node, sym);
     }
     
     private Symbol getSymbol(ParserRuleContext node) {
-    	Symbol sym = symbols.get(node);
+    	Symbol sym = passData.symbols.get(node);
     	assert sym != null;
     	return sym;
     }
 
     @Override
     public void enterCompilationUnit(@NotNull MJParser.CompilationUnitContext ctx) {
-        globals = new GlobalScope();
+        passData.globals = new GlobalScope();
         //TODO define globals - Object, Class, String
-		ClassSymbol nullClass = new ClassSymbol("_NULL_", globals, null);
-		globals.define(nullClass);
-        currentScope = globals;
+		ClassSymbol nullClass = new ClassSymbol("_NULL_", passData.globals, null);
+		passData.globals.define(nullClass);
+    	List<String> bootclasspath = (List<String>)passData.options.valuesOf("bootclasspath");
+    	List<String> nameComponents = new ArrayList<String>();
+    	for (String className : preloadClasses) {
+    		nameComponents.clear();
+    		nameComponents.add(className);
+    		importClass(nameComponents, bootclasspath);
+    	}
+        currentScope = passData.globals;
      }
 
     @Override
     public void exitCompilationUnit(@NotNull MJParser.CompilationUnitContext ctx) {
-    	assert currentScope == globals;
-        System.out.println(globals);
+    	assert currentScope == passData.globals;
+        System.out.println(passData.globals);
     }
-	
+    
+    @Override public void exitImportDeclaration(@NotNull MJParser.ImportDeclarationContext ctx) {
+    	List<TerminalNode> identifiers = ctx.qualifiedName().Identifier();
+    	List<String> nameComponents = new ArrayList<String>(identifiers.size());
+    	for (TerminalNode ident : identifiers) {
+    		nameComponents.add(ident.getText());
+    	}
+    	List<String> classpath = (List<String>)passData.options.valuesOf("classpath");
+		importClass(nameComponents, classpath);    	
+    }
+
+	private void importClass(List<String> nameComponents, List<String> path) {
+		// Read saved symbols
+		StringBuilder qname = new StringBuilder();
+    	for (String nameComponent : nameComponents) {
+    		if (qname.length() > 0) qname.append(File.separatorChar);
+    		qname.append(nameComponent);
+    	}
+    	qname.append(PassData.IMPORT_SUFFIX);
+        try {
+        	boolean found = false;
+        	for (String pathDir : path) {
+            	File fname;
+        		if (pathDir == null || pathDir.length() == 0) {
+        			if (passData.inputDir == null) fname = new File(qname.toString());
+        			else fname = new File(passData.inputDir,qname.toString());
+        		} else fname = new File(pathDir+File.separator+qname.toString());
+            	if (! fname.isFile() ) continue; // try next in path
+                found = true;
+            	FileInputStream fis = new FileInputStream(fname);
+                ObjectInputStream ois = new ObjectInputStream(fis);
+                ClassSymbol importClass = (ClassSymbol) ois.readObject();
+                System.out.println("import "+qname+" "+importClass);
+                ois.close();
+                passData.globals.define(importClass);
+                break;
+        	}
+			if (!found) Compiler.error("Not found "+qname+" (path "+path+")");        	
+		} catch (IOException | ClassNotFoundException excp) {
+			Compiler.error("Unable to read symbols "+excp.getMessage());
+		}
+	}
+    
+    @Override public void exitQualifiedName(MJParser.QualifiedNameContext ctx) { }
+    
     @Override
 	public void exitTypeDeclaration(@NotNull MJParser.TypeDeclarationContext ctx) {
     	Access access = Access.AccessDefault;
@@ -65,7 +131,7 @@ public class DefinitionPass extends MJBaseListener {
 		//LATER could be interfaceDeclaration
 		if (cdecl != null) {
 			System.out.println("exitTypeDeclaration class access "+access);
-			((ClassSymbol)scopes.get(cdecl)).setAccess(access);
+			((ClassSymbol)passData.scopes.get(cdecl)).setAccess(access);
 		}
 	}
 	@Override public void exitModifier(@NotNull MJParser.ModifierContext ctx) { }

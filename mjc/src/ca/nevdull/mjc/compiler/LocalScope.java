@@ -9,6 +9,9 @@ package ca.nevdull.mjc.compiler;
  * Visit http://www.pragmaticprogrammer.com/titles/tpantlr2 for more book information.
 ***/
 public class LocalScope extends BaseScope {
+
+	private static final long serialVersionUID = 8808443045017075758L;
+	
 	int line;
     
 	public LocalScope(Scope enclosingScope, int line) {

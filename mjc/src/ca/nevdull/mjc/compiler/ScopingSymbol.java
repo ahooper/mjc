@@ -14,6 +14,9 @@ import java.util.Map;
 import org.antlr.v4.runtime.Token;
 
 public abstract class ScopingSymbol extends Symbol {
+
+	private static final long serialVersionUID = -8307578720591527126L;
+	
 	public Scope enclosingScope;
 
 	public ScopingSymbol(Token nameToken, Scope enclosingScope) {

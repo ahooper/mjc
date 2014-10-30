@@ -2,9 +2,12 @@ package ca.nevdull.mjc.compiler;
 
 import org.antlr.v4.runtime.Token;
 
-public class Symbol {
+public class Symbol implements java.io.Serializable {
+
+	private static final long serialVersionUID = 5601057586017131523L;
+	
 	String name;
-    Token token;		// token for definition source position
+    transient Token token;		// token for definition source position
 	Type type;
     Scope scope;      // All symbols know what scope contains them.
 	Access access;

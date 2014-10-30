@@ -1,6 +1,9 @@
 package ca.nevdull.mjc.compiler;
 
 public class ArrayType extends Symbol implements Type {
+
+	private static final long serialVersionUID = 8427707270005661330L;
+	
 	Type elementType;
 
 	/**

@@ -5,40 +5,30 @@ import java.util.ListIterator;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.misc.NotNull;
-import org.antlr.v4.runtime.tree.ParseTreeProperty;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 import ca.nevdull.mjc.compiler.MJParser.PrimitiveTypeContext;
 
 public class ReferencePass extends MJBaseListener {
-    ParseTreeProperty<Scope> scopes;
-    GlobalScope globals;
-    ParseTreeProperty<Symbol> symbols;
-    ParseTreeProperty<Type> types = new ParseTreeProperty<Type>();
+    PassData passData;
 	
-    /**
-	 * @param scopes
-	 * @param globals
-	 */
-	public ReferencePass(ParseTreeProperty<Scope> scopes, GlobalScope globals, ParseTreeProperty<Symbol> symbols) {
+	public ReferencePass(PassData passData) {
 		super();
-		this.scopes = scopes;
-		this.globals = globals;
-		this.symbols = symbols;
+		this.passData = passData;
 	}
     
     private Symbol getSymbol(ParserRuleContext node) {
-    	Symbol sym = symbols.get(node);
+    	Symbol sym = passData.symbols.get(node);
     	assert sym != null;
     	return sym;
     }
     
     private void setType(ParserRuleContext node, Type type) {
-    	types.put(node, type);
+    	passData.types.put(node, type);
     }
     
     private Type getType(ParserRuleContext node) {
-    	Type t = types.get(node);
+    	Type t = passData.types.get(node);
     	assert t != null;
     	return t;
     }
@@ -128,7 +118,7 @@ public class ReferencePass extends MJBaseListener {
 	
 	@Override
 	public void exitClassOrInterfaceType(MJParser.ClassOrInterfaceTypeContext ctx) {
-		Scope scope = scopes.get(ctx.getParent());
+		Scope scope = passData.scopes.get(ctx.getParent());
 		Token name = ctx.Identifier(0).getSymbol();
 		Symbol sym = scope.resolve(name.getText());
         if (sym == null) {
@@ -258,7 +248,7 @@ public class ReferencePass extends MJBaseListener {
 	public void exitIdentifierPrimary(@NotNull MJParser.IdentifierPrimaryContext ctx) {
     	Token token = ctx.Identifier().getSymbol();
         String name = token.getText();
-        Scope refScope = scopes.get(ctx);
+        Scope refScope = passData.scopes.get(ctx);
         Symbol sym = refScope.resolve(name);
         if (sym == null) {
         	Compiler.error(token, name+" is not defined","IdentifierPrimary");
@@ -274,7 +264,7 @@ public class ReferencePass extends MJBaseListener {
         		Compiler.error(token, name+" is forward local variable reference","IdentifierPrimary");
         		sym = null;
         	} else {
-        		symbols.put(ctx, sym);
+        		passData.symbols.put(ctx, sym);
         	}
         }
 	}
@@ -288,7 +278,7 @@ public class ReferencePass extends MJBaseListener {
         if (ptc != null) {
         	setType(ctx, getType(ctx.primitiveType()));
 		} else {
-	        Scope refScope = scopes.get(ctx);
+	        Scope refScope = passData.scopes.get(ctx);
 			Symbol sym = null;
 			for (TerminalNode id : ctx.Identifier()) {
 		    	Token token = id.getSymbol();
@@ -301,7 +291,7 @@ public class ReferencePass extends MJBaseListener {
 		        }
 			}
 			if (sym instanceof ClassSymbol) {
-	    		symbols.put(ctx, sym);
+	    		passData.symbols.put(ctx, sym);
 			} else {
 	        	Compiler.error(sym.getToken(), sym.getName()+" is not a class","CreatedName");
 			}

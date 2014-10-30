@@ -1,5 +1,8 @@
 #include <stdlib.h>
-#include <uchar.h>
+
+//#include <uchar.h>
+typedef uint16_t char16_t;
+
 typedef unsigned char	jboolean;
 typedef char			jbyte;
 typedef char16_t		jchar;

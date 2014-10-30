@@ -33,8 +33,13 @@ grammar MJ;
 
 
 compilationUnit
-    :   typeDeclaration* EOF
+    :   importDeclaration*
+    	typeDeclaration* EOF
     ;
+
+importDeclaration
+	:	IMPORT /*TODO STATIC?*/ qualifiedName ('.' '*')? ';'
+	;
 
 typeDeclaration
     :   classOrInterfaceModifier* classDeclaration
@@ -49,6 +54,9 @@ classOrInterfaceModifier
     :   (   PUBLIC     // class or interface
     	|	PROTECTED
     	|	PRIVATE
+    	|	STATIC
+    	|	ABSTRACT
+    	|	FINAL
         )
     ;
 
