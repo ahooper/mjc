@@ -2,12 +2,12 @@ package ca.nevdull.mjc.compiler;
 
 import org.antlr.v4.runtime.Token;
 
-public class VarSymbol extends Symbol {
+public class VariableSymbol extends Symbol {
 
 	private static final long serialVersionUID = 4514522783018333957L;
 
-	public VarSymbol(Token nameToken, Type type) {
-		super(nameToken);
+    public VariableSymbol(Token token, Type type, Scope currentScope) {
+    	super(token, currentScope);
 		setType(type);
 	}
 

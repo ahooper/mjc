@@ -33,8 +33,7 @@ grammar MJ;
 
 
 compilationUnit
-    :   importDeclaration*
-    	typeDeclaration* EOF
+    :   importDeclaration* typeDeclaration* EOF
     ;
 
 importDeclaration
@@ -60,7 +59,7 @@ classOrInterfaceModifier
         )
     ;
 
-classDeclaration
+classDeclaration									locals [ ClassSymbol defn ]
     :   CLASS Identifier 
         (EXTENDS type)?
         classBody
@@ -83,7 +82,7 @@ memberDeclaration
     |   classDeclaration
     ;
 
-methodDeclaration
+methodDeclaration									locals [ MethodSymbol defn, Type tipe ]
     :   (type|VOID) Identifier formalParameters arrayDimension
         (   methodBody
         |   ';'
@@ -91,9 +90,8 @@ methodDeclaration
         )
     ;
 
-constructorDeclaration
-    :   Identifier formalParameters
-        constructorBody
+constructorDeclaration								locals [ MethodSymbol defn ]
+    :   Identifier formalParameters constructorBody
     ;
 
 fieldDeclaration
@@ -104,7 +102,7 @@ variableDeclarators
     :   variableDeclarator (',' variableDeclarator)*
     ;
 
-variableDeclarator
+variableDeclarator									locals [ VariableSymbol defn, Type tipe ]
     :   variableDeclaratorId ('=' variableInitializer)?
     ;
 
@@ -121,7 +119,7 @@ arrayInitializer
     :   '{' (variableInitializer (',' variableInitializer)* (',')? )? '}'
     ;
 
-type
+type												locals [ Type tipe ]
     :   classOrInterfaceType arrayDimension			# objectType
     |   primitiveType arrayDimension				# primitType
     ;
@@ -130,11 +128,11 @@ arrayDimension
 	:	('[' ']')*
 	;
 
-classOrInterfaceType
+classOrInterfaceType								locals [ Scope refScope, Type tipe ]
     :   Identifier ('.' Identifier )*
     ;
 
-primitiveType
+primitiveType										locals [ Type tipe ]
     :   BOOLEAN										# booleanType
     |   CHAR										# charType
     |   BYTE										# byteType
@@ -153,7 +151,7 @@ formalParameterList
     :   formalParameter (',' formalParameter)*
     ;
 
-formalParameter
+formalParameter										locals [ VariableSymbol defn, Type tipe ]
     :   variableModifier* type variableDeclaratorId
     ;
 
@@ -173,7 +171,7 @@ qualifiedName
     :   Identifier ('.' Identifier)*
     ;
 
-literal
+literal												locals [ Type tipe ]
     :   IntegerLiteral
     |   FloatingPointLiteral
     |   CharacterLiteral
@@ -226,7 +224,7 @@ constantExpression
     :   expression
     ;
 
-expression
+expression											locals [ Type tipe ]
     :   primary										# primExpression
     |   expression '.' Identifier					# dotExpression
     |   expression '[' expression ']'				# indexExpression
@@ -251,7 +249,7 @@ expression
         expression									# assignExpression
     ;
 
-primary
+primary												locals [ Scope refScope, Symbol defn, Type tipe ]
     :   '(' expression ')'							# parenPrimary
     |   THIS										# thisPrimary
     |   SUPER										# superPrimary
@@ -259,12 +257,12 @@ primary
     |   Identifier									# identifierPrimary
     ;
 
-creator
+creator												locals [ Type tipe ]
     :   createdName arrayCreatorRest				# arrayCreator
     |	createdName classCreatorRest				# classCreator
     ;
 
-createdName
+createdName											locals [ Scope refScope, Symbol defn, Type tipe ]
     :   Identifier ('.' Identifier)*
     |   primitiveType
     ;

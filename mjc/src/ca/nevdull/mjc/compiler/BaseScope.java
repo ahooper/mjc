@@ -26,7 +26,7 @@ public abstract class BaseScope implements Scope, java.io.Serializable {
 
     public Symbol resolve(String name) {
         Symbol s = symbols.get(name);
-        if (s != null ) return s;
+        if (s != null) return s;
         // if not here, check any enclosing scope
         if (enclosingScope != null) {
         	System.out.println(getScopeName()+" resolve enclosing "+enclosingScope.toString());

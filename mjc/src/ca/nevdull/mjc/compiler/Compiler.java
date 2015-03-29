@@ -8,17 +8,109 @@ import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.*;
 
+import ca.nevdull.mjc.compiler.MJParser.CompilationUnitContext;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.ListIterator;
+import java.util.regex.Pattern;
 
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 
 public class Compiler {
+
+	public static final String PATH_SEPARATOR = ":"; // or File.pathSeparator
+	public static final String BOOT_CLASS_PATH_OPTION = "-B";
+	public static final String[] defaultBootClassPath = {"src/ca/nevdull/mjc/lib"};
+	String[] bootClassPath = defaultBootClassPath;
+	public static final String CLASS_PATH_OPTION = "-L";
+	public static final String[] defaultClassPath = {""/*i.e. current directory*/};
+	String[] classPath = defaultClassPath;
+	public static final String TRACE_OPTION = "-t";
+	HashSet<String> trace = new HashSet<String>();
+
+    public static final String IMPORT_SUFFIX = ".import";
+
+    static int errorCount = 0;
+	private static final int ERROR_LIMIT = 100;
+
+	public static void main(String[] args) {
+		Compiler compiler = new Compiler();
+		boolean any = false;
+		for (ListIterator<String> argIter = Arrays.asList(args).listIterator();
+			 argIter.hasNext(); ) {
+			String arg = argIter.next();
+			if (arg.startsWith("-")) {
+				compiler.option(arg,argIter);
+			} else {
+        		compiler.compile(arg);
+        		any = true;
+        	}
+        }
+        if (!any) compiler.compile(null);
+	}
+	
+	static Pattern pathPat = Pattern.compile(PATH_SEPARATOR,Pattern.LITERAL);
+	private String[] pathSplit(String arg) {
+		return pathPat.split(arg,-1);
+	}
+
+	private void option(String arg, ListIterator<String> argIter) {
+		if (arg.equals(BOOT_CLASS_PATH_OPTION) && argIter.hasNext()) {
+			bootClassPath = pathSplit(argIter.next());
+		} else if (arg.equals(CLASS_PATH_OPTION) && argIter.hasNext()) {
+			classPath = pathSplit(argIter.next());
+		} else if (arg.equals(TRACE_OPTION) && argIter.hasNext()) {
+			trace.add(argIter.next());
+		} else {
+			error("Unrecognized option "+arg);
+		}
+	}
+
+	private static void errprintf(String format, Object... args) {
+		//TODO if (errorCount >= ERROR_LIMIT) throw new Exception("too many errors");
+		System.err.printf(format, args);
+        System.err.flush();
+        errorCount  += 1;
+	}
+	
+    public static void error(Token t, String text, String caller) {
+        errprintf("line %d@%d at %s: %s - %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(), text, caller);
+    }
+
+	public static void error(Token t, String text) {
+        errprintf("line %d@%d at %s: %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(), text);
+    }
+
+    public static void error(TerminalNode tn, String text, String caller) {
+    	error(tn.getSymbol(), text, caller);
+    }
+
+	public static void error(TerminalNode tn, String text) {
+		error(tn.getSymbol(), text);
+    }
+	
+    public static void error(String text) {
+        errprintf("%s\n", text);
+    }
+
+	public static void note(Token t, String text) {
+        System.err.printf("line %d@%d at %s: %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(),
+        		text);
+        System.err.flush();
+	}
+
+	public static void debug(String text) {
+        System.out.println(text);
+        System.out.flush();
+	}
 
 	/***
 	 * Excerpted from "The Definitive ANTLR 4 Reference",
@@ -35,10 +127,10 @@ public class Compiler {
 					String msg,
 					RecognitionException e)
 	    {
-	        System.err.println(line+":"+charPositionInLine+" "+msg);
+	        errprintf("line %d@%d at %s: %s\n", line, charPositionInLine+1, offendingSymbol, msg); 
 	        underlineError(recognizer,(Token)offendingSymbol,
 	                       line, charPositionInLine);
-System.err.flush();
+	        System.err.flush();
 	    }
 
 	    protected void underlineError(Recognizer<?, ?> recognizer,
@@ -62,90 +154,62 @@ System.err.flush();
 	        System.err.println();
 	    }
 	}
-
-	public static void error(Token t, String msg) {
-        System.err.printf("line %d@%d %s\n", t.getLine(), t.getCharPositionInLine(),
-                          msg);
-System.err.flush();
-    }
-	
-    public static void error(String msg) {
-        System.err.println(msg);
-System.err.flush();
-    }
-	
-    public static void error(Token t, String msg, String caller) {
-        System.err.printf("line %d@%d %s - %s\n", t.getLine(), t.getCharPositionInLine(),
-                          msg, caller);
-System.err.flush();
-    }
-
-    public void process(String[] args) throws Exception {
-    	
-    	// Options
-    	// http://pholser.github.io/jopt-simple/
-        OptionParser optParser = new OptionParser();
-        optParser.accepts(PassData.BOOTCLASSPATH_OPTION).withRequiredArg().ofType( String.class )
-        				.withValuesSeparatedBy(PassData.PATH_SEPARATOR_CHAR).defaultsTo( PassData.defaultBootClassPath );
-        optParser.accepts(PassData.CLASSPATH_OPTION).withRequiredArg().ofType( String.class )
-						.withValuesSeparatedBy(PassData.PATH_SEPARATOR_CHAR).defaultsTo( PassData.defaultClassPath );
-        OptionSpec<File> optFiles = optParser.nonOptions().ofType( File.class );
-        OptionSet options = optParser.parse(args);
-        
-        // Input files
-        List<File> fileNames = options.valuesOf(optFiles);
-        if ( !fileNames.isEmpty() ) {
-        	for (File inputFile : fileNames) {
-        		if (args.length > 1) System.out.println(inputFile);
-     			File inputDir = inputFile.getParentFile();
-    	        process1(options, new FileInputStream(inputFile), inputDir);
-        	}
-        } else {
-        	process1(options, System.in, null);
-        }
-        
-    }
 	
 	private static final String DIVIDER = "\n------------------------------------------------------------\n";
 
-	/**
-	 * @param options 
-	 * @param is
-	 * @throws IOException
-	 * @throws RecognitionException
-	 */
-	public void process1(OptionSet options, InputStream is, File inputDir) throws IOException,
-			RecognitionException {
-		ANTLRInputStream input = new ANTLRInputStream(is);
-        MJLexer lexer = new MJLexer(input);
-        CommonTokenStream tokens = new CommonTokenStream(lexer);
-        MJParser parser = new MJParser(tokens);
-        parser.removeErrorListeners(); // remove ConsoleErrorListener
-        parser.addErrorListener(new UnderlineErrorListener());
-        parser.setBuildParseTree(true);
-        ParseTree tree = parser.compilationUnit();
-        // show tree in text form
-        //System.out.println(tree.toStringTree(parser));
-
-        ParseTreeWalker walker = new ParseTreeWalker();
-        PassData passData = new PassData();
-        passData.options = options;
-        passData.inputDir = inputDir;
-        DefinitionPass def = new DefinitionPass(passData);
-        walker.walk(def, tree);
-        System.out.println(DIVIDER);
-        ReferencePass ref = new ReferencePass(passData);
-        walker.walk(ref, tree);
-        System.out.println(DIVIDER);
-        GeneratePass gen = new GeneratePass(passData);
-        walker.walk(gen, tree);
-	}
-
-	public static void main(String[] args) {
-        try {
-			new Compiler().process(args);
-		} catch (Exception excp) {
-			excp.printStackTrace();
+	private void compile(String arg) {
+		ANTLRInputStream input;
+		errorCount = 0;
+		try {
+			String unitName, codePath = ".";;
+			if (arg == null) {
+				input = new ANTLRInputStream(System.in);
+				unitName = "anonymous";
+			} else {
+				File inFile = new File(arg);
+				input = new ANTLRInputStream(new FileInputStream(inFile));
+				int x = arg.lastIndexOf(File.separatorChar);
+				if (x >= 0) {
+					unitName = arg.substring(x+1);
+					codePath = arg.substring(0,x);
+				} else {
+					unitName = arg;
+				}
+				x = unitName.lastIndexOf('.');
+				if (x > 0) unitName = unitName.substring(0,x);
+				System.out.print("---------- ");
+				System.out.println(arg);
+				System.out.flush();
+			}
+	        MJLexer lexer = new MJLexer(input);
+	        CommonTokenStream tokens = new CommonTokenStream(lexer);
+	        MJParser parser = new MJParser(tokens);
+	        parser.removeErrorListeners(); // remove ConsoleErrorListener
+	        parser.addErrorListener(new UnderlineErrorListener());
+	        parser.setBuildParseTree(true);
+	        ParseTree tree = parser.compilationUnit();
+	        // show tree in text form
+	        //System.out.println(tree.toStringTree(parser));
+	
+	        ParseTreeWalker walker = new ParseTreeWalker();
+	        PassData passData = new PassData();
+	        passData.options = this;
+	        passData.parser = parser;
+	        DefinitionPass def = new DefinitionPass(passData);
+	        walker.walk(def, tree);
+	        System.out.println(DIVIDER);
+	        ReferencePass ref = new ReferencePass(passData);
+	        walker.walk(ref, tree);
+	        System.out.println(DIVIDER);
+//	        GeneratePass gen = new GeneratePass(passData);
+//	        walker.walk(gen, tree);
+	        CodeVisitor cv = new CodeVisitor(passData);
+	        cv.visitCompilationUnit((CompilationUnitContext) tree);
+		} catch (IOException excp) {
+			error(excp.getMessage());
+		}
+		if (errorCount > 0) {
+			System.err.printf("%s: %d error%s\n", arg, errorCount, (errorCount>1)?"s":"");
 		}
 	}
 

@@ -25,6 +25,7 @@ public class Test1 {
 	    x = f; // f is not a variable (error)
 	    int err = fwd;
 	    int fwd = 0;
+	    if (x == 0) { x = x << 4; } 
 	}
 
 	class defaultInner {

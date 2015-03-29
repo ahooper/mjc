@@ -2,7 +2,7 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-	<classpathentry kind="lib" path="/Users/andy/Software/java/@Distribution/antlr-4.4-complete.jar"/>
+	<classpathentry kind="lib" path="/Users/andy/Software/java/@Distribution/antlr-4.4-complete.jar" sourcepath="/Users/andy/Software/sol/antlr4-master/runtime/Java/src"/>
 	<classpathentry kind="lib" path="/Users/andy/Software/java/@Distribution/jopt-simple-4.7.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

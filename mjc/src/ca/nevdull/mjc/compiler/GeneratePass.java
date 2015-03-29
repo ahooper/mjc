@@ -40,22 +40,7 @@ public class GeneratePass extends MJBaseListener {
 	public GeneratePass(PassData passData) {
 		super();
 		this.passData = passData;
-		this.passData.inputDir = passData.inputDir;
 	}
-	
-    private void setType(ParserRuleContext node, Type type) {
-    	passData.types.put(node, type);
-    }
-    
-    private Type getType(ParserRuleContext node) {
-    	Type t = passData.types.get(node);
-    	assert t != null;
-    	return t;
-    }
-      
-    private void promoteType(ParserRuleContext node, ParserRuleContext subNode) {
-    	setType(node, getType(subNode));
-    }
     
     int reg = 1;
     public int nextreg() {
@@ -76,10 +61,11 @@ public class GeneratePass extends MJBaseListener {
 	public void printContextTree(ParseTree t, String indent) {
 		System.out.print(indent);
 		System.out.print(t.getClass().getSimpleName());
+		/* TODO
 		if (t instanceof ParserRuleContext) {
 			System.out.print(" type="); System.out.print(passData.types.get((ParserRuleContext)t));
 			System.out.print(" symbol="); System.out.print(passData.symbols.get((ParserRuleContext)t));
-		} else if (t instanceof TerminalNodeImpl) {
+		} else*/ if (t instanceof TerminalNodeImpl) {
 			System.out.print(" ");
 			System.out.print((TerminalNodeImpl)t);
 		}
@@ -167,7 +153,7 @@ public class GeneratePass extends MJBaseListener {
 
 	@Override public void exitCompilationUnit(MJParser.CompilationUnitContext ctx) { }
     @Override public void exitImportDeclaration(@NotNull MJParser.ImportDeclarationContext ctx) {
-		// Read saved symbols
+		// TODO Read saved symbols
     	StringBuilder qname = new StringBuilder();
     	for (TerminalNode nameComponent : ctx.qualifiedName().Identifier()) {
     		if (qname.length() > 0) qname.append(File.separatorChar);
@@ -179,14 +165,14 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitModifier(MJParser.ModifierContext ctx) { }
 	@Override public void exitClassOrInterfaceModifier(MJParser.ClassOrInterfaceModifierContext ctx) { }
 	@Override public void enterClassDeclaration(MJParser.ClassDeclarationContext ctx) {
-		Symbol classSymbol = passData.symbols.get(ctx);
+		Symbol classSymbol = ctx.defn;
 		String className = classSymbol.getName();
     	String superName = null;
 		ClassSymbol sup = ((ClassSymbol)classSymbol).getSuperClass();
 		if (sup != null) {
 	    	superName = sup.getName();
 		}
-		currDest = new ClassDest((ClassSymbol)passData.symbols.get(ctx), currDest);
+		currDest = new ClassDest(ctx.defn, currDest);
 		
 		currDest.classStructure.add("#ifndef ",className,"_DEFN\n");
 		currDest.classStructure.add("#define ",className,"_DEFN\n\n");
@@ -214,7 +200,7 @@ public class GeneratePass extends MJBaseListener {
 		Scope encl = ((ClassSymbol)classSymbol).getEnclosingScope();
 	}
 	@Override public void exitClassDeclaration(MJParser.ClassDeclarationContext ctx) {
-		ClassSymbol classSymbol = (ClassSymbol)passData.symbols.get(ctx);
+		ClassSymbol classSymbol = ctx.defn;
 		String className = classSymbol.getName();
 		if (!currDest.haveConstructor) {
 			defineDefaultConstructor(classSymbol);			
@@ -223,7 +209,7 @@ public class GeneratePass extends MJBaseListener {
     	
 		// Save symbols for import
         try {
-			FileOutputStream fos = new FileOutputStream(currDest.makeFilePath(PassData.IMPORT_SUFFIX));
+			FileOutputStream fos = new FileOutputStream(currDest.makeFilePath(Compiler.IMPORT_SUFFIX));
 	        ObjectOutputStream oos = new ObjectOutputStream(fos);
 			oos.writeObject(classSymbol);
 	        oos.close();
@@ -285,7 +271,7 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitEmptyClassBodyDeclaration(MJParser.EmptyClassBodyDeclarationContext ctx) { }
 	@Override public void exitMemberDeclaration(MJParser.MemberDeclarationContext ctx) { }
 	@Override public void enterMethodDeclaration(MJParser.MethodDeclarationContext ctx) {
-		Symbol method = passData.symbols.get(ctx);
+		Symbol method = ctx.defn;
 		if (ctx.methodBody() != null) {
 		} else if (ctx.NATIVE() != null) {
 			currDest.methodBodies.add("extern ");
@@ -318,7 +304,7 @@ public class GeneratePass extends MJBaseListener {
 	}
 
 	@Override public void enterConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) {
-		Symbol method = passData.symbols.get(ctx);
+		Symbol method = ctx.defn;
 		beginMethod(method.getName(), method.getType());
 		currDest.haveConstructor = true;
 	}
@@ -328,13 +314,13 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void enterFieldDeclaration(MJParser.FieldDeclarationContext ctx) {
 		//LATER could order fields by descending alignment
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
-			Symbol sym = passData.symbols.get(vd.variableDeclaratorId());
+			Symbol sym = vd.defn;
 			currDest.instanceStructure.add(indent).add(typeName(sym.getName(), sym.getType())).add(";\n");			
 		}
 	}
 	@Override public void exitFieldDeclaration(MJParser.FieldDeclarationContext ctx) {
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
-			Symbol sym = passData.symbols.get(vd.variableDeclaratorId());
+			Symbol sym = vd.defn;
 			if (vd.variableInitializer() != null) {
 				currDest.methodBodies.add(indent).add(sym.getName(),"=").add(rands.get(vd.variableInitializer())).add(";\n");
 				//TODO should be in constructor/initializer
@@ -360,7 +346,7 @@ public class GeneratePass extends MJBaseListener {
 		return ret;
 	}
 	@Override public void exitSimpleVariableInitializer(MJParser.SimpleVariableInitializerContext ctx) {
-		promoteType(ctx, ctx.expression());
+		passUpType(ctx, ctx.expression());
 		rands.put(ctx, rands.get(ctx.expression()));
 	}
 	@Override public void exitArrayVariableInitializer(MJParser.ArrayVariableInitializerContext ctx) {
@@ -400,7 +386,7 @@ public class GeneratePass extends MJBaseListener {
 	
 	@Override public void exitFormalParameterList(MJParser.FormalParameterListContext ctx) { }
 	@Override public void enterFormalParameter(MJParser.FormalParameterContext ctx) {
-		Symbol sym = passData.symbols.get(ctx.variableDeclaratorId());
+		Symbol sym = ctx.defn;
 		String symName = sym.getName();
 		Type symType = sym.getType();
 		currDest.classStructure.add(", ").add(typeName(symName, symType));			
@@ -434,7 +420,7 @@ public class GeneratePass extends MJBaseListener {
 			//TODO t = Object; 
 		}
 		rands.put(ctx, new OutputAtom(text));
-		setType(ctx, t);
+		ctx.tipe = t;
 	}
 	@Override public void enterBlock(MJParser.BlockContext ctx) {
 		beginBlock();
@@ -454,13 +440,13 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitLocalVariableDeclarationStatement(MJParser.LocalVariableDeclarationStatementContext ctx) { }
 	@Override public void enterLocalVariableDeclaration(MJParser.LocalVariableDeclarationContext ctx) {
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
-			Symbol sym = passData.symbols.get(vd.variableDeclaratorId());
+			Symbol sym = vd.defn;
 			currDest.methodBodies.add(indent).add(typeName(sym.getName(), sym.getType())).add(";\n");
 		}
 	}
 	@Override public void exitLocalVariableDeclaration(MJParser.LocalVariableDeclarationContext ctx) {
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
-			Symbol sym = passData.symbols.get(vd.variableDeclaratorId());
+			Symbol sym = vd.defn;
 			if (vd.variableInitializer() != null) {
 				currDest.methodBodies.add(indent).add(sym.getName(),"=").add(rands.get(vd.variableInitializer())).add(";\n");				
 			}
@@ -491,8 +477,8 @@ public class GeneratePass extends MJBaseListener {
 	}
 
 	public void binaryOperator(MJParser.ExpressionContext ctx, MJParser.ExpressionContext left, String op, MJParser.ExpressionContext right) {
-		Type leftType = getType(left);
-		Type typeRight = getType(right);
+		Type leftType = left.tipe;
+		Type typeRight = right.tipe;
 		Type typeResult = leftType;  //TODO determine result type
 		String rand = "_e"+nextreg();
 		currDest.methodBodies.add(indent).add(typeName(rand,typeResult)).add("=").add(rands.get(left)).add(op).add(rands.get(right)).add(";\n");
@@ -506,12 +492,12 @@ public class GeneratePass extends MJBaseListener {
 		if (sym == null) {
 			Compiler.error(dest.getStop(), dest.getText()+" is not a variable or field","AssignExpression");
 			return;
-		} else if (!(sym instanceof VarSymbol)) {
+		} else if (!(sym instanceof VariableSymbol)) {
 			Compiler.error(dest.getStop(), dest.getText()+" is not a variable or field","AssignExpression");
 			return;
 		}
 		MJParser.ExpressionContext val = ctx.expression(1);
-		Type type = getType(val);
+		Type type = val.tipe;
 		if (!(type instanceof PrimitiveType || type instanceof ClassSymbol)) {
 			Compiler.error(dest.getStop(), "not an assignable value","AssignExpression");
 		}
@@ -529,7 +515,7 @@ public class GeneratePass extends MJBaseListener {
 			return;
 		} else if (!(sym instanceof MethodSymbol)) {
 			Compiler.error(exp.getStop(), exp.getText()+" is not a method","CallExpression");
-			setType(ctx, UnknownType.getInstance());
+			ctx.tipe = UnknownType.getInstance();
 			return;
 		}
 		OutputItem method = rands.get(exp);
@@ -548,7 +534,7 @@ public class GeneratePass extends MJBaseListener {
 				currDest.methodBodies.add(",").add(rands.get(arg));
 			}
 		}
-		setType(ctx, type);
+		ctx.tipe = type;
 		currDest.methodBodies.add(");\n");
 	}
 	@Override public void exitOrExpression(MJParser.OrExpressionContext ctx) {
@@ -568,7 +554,7 @@ public class GeneratePass extends MJBaseListener {
 		binaryOperator(ctx, ctx.expression(0), "&", ctx.expression(1)); 
 	}
 	@Override public void exitPrimExpression(MJParser.PrimExpressionContext ctx) {
-		promoteType(ctx, ctx.primary());
+		ctx.tipe = ctx.primary().tipe;
 		rands.put(ctx, rands.get(ctx.primary()));
 		passData.symbols.put(ctx, passData.symbols.get(ctx.primary()));
 		//System.out.println("exitPrimExpression "+ rands.get(ctx));
@@ -577,7 +563,7 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitCastExpression(MJParser.CastExpressionContext ctx) { }
 	@Override public void exitDotExpression(MJParser.DotExpressionContext ctx) {
  		MJParser.ExpressionContext exp = ctx.expression();
-		Type type = getType(exp);
+		Type type = exp.tipe;
     	Token token = ctx.Identifier().getSymbol();
         String name = token.getText();
         Symbol sym = null;
@@ -595,12 +581,12 @@ public class GeneratePass extends MJBaseListener {
         }
 		OutputList ref = new OutputList();
 		if (sym != null && sym instanceof MethodSymbol) {
-			setType(ctx, (MethodSymbol)sym);  // let method be a pseudo-type until called
+			ctx.tipe = (MethodSymbol)sym;  // let method be a pseudo-type until called
 			//TODO handle static method
 			ref.add("(*(");
 			checkRef(ref, rands.get(exp)).add("->_class->_data.").add(name).add("))(").add(rands.get(exp));			
 		} else {
-			setType(ctx, type);
+			ctx.tipe = type;
 			checkRef(ref, rands.get(exp)).add("->_data.").add(name);
 		}
 		passData.symbols.put(ctx, sym);
@@ -613,22 +599,22 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void exitShiftExpression(MJParser.ShiftExpressionContext ctx) { }
 	@Override public void exitPlusExpression(MJParser.PlusExpressionContext ctx) { }
 	@Override public void exitNewExpression(MJParser.NewExpressionContext ctx) {
-		promoteType(ctx, ctx.creator());
+		ctx.tipe = ctx.creator().tipe;
 		rands.put(ctx, rands.get(ctx.creator()));
 	}
 	@Override public void exitLiteralPrimary(MJParser.LiteralPrimaryContext ctx) {
-		promoteType(ctx, ctx.literal());
+		ctx.tipe = ctx.literal().tipe;
 		rands.put(ctx, rands.get(ctx.literal()));
 	}
 	@Override public void exitSuperPrimary(MJParser.SuperPrimaryContext ctx) { }
 	@Override public void exitIdentifierPrimary(MJParser.IdentifierPrimaryContext ctx) {
-        Symbol sym = passData.symbols.get(ctx);
+        Symbol sym = ctx.defn;
 		Type symType = null;
         if (sym != null) {
     		String symName = sym.getName();
         	symType = sym.getType();
 			System.out.println(symName+" type "+symType);
-            setType(ctx, symType);
+			ctx.tipe = symType;
             Scope scope = sym.getScope();
             OutputItem access = null;
             if (scope instanceof BaseScope || scope instanceof MethodSymbol) {
@@ -638,7 +624,7 @@ public class GeneratePass extends MJBaseListener {
         		if (sym != null && sym instanceof MethodSymbol) {
         			// "this" doesn't need a null pointer check
         			((OutputList)access).add("(*(this->_class->_data.",symName).add("))(").add("this");
-        			setType(ctx, (MethodSymbol)sym);  // doesn't have result type until called
+        			ctx.tipe = (MethodSymbol)sym;  // doesn't have result type until called
         		} else {
         			((OutputList)access).add("this->_data.",symName);
         		}
@@ -648,16 +634,16 @@ public class GeneratePass extends MJBaseListener {
             rands.put(ctx, access);
         } else {
 	        if (symType == null) symType = UnknownType.getInstance();
-	        setType(ctx, symType);
+	        ctx.tipe = symType;
 			rands.put(ctx, new OutputAtom("_unknown"));
         }
 	}
 	@Override public void exitThisPrimary(MJParser.ThisPrimaryContext ctx) {
-		setType(ctx, currDest.getSymbol());
+		ctx.tipe = currDest.getSymbol();
 		rands.put(ctx, new OutputAtom("this"));
 	}
 	@Override public void exitParenPrimary(MJParser.ParenPrimaryContext ctx) {
-		promoteType(ctx, ctx.expression());
+		ctx.tipe = ctx.expression().tipe;
 		rands.put(ctx, rands.get(ctx.expression()));
 		passData.symbols.put(ctx, passData.symbols.get(ctx.expression()));
 	}
@@ -665,7 +651,7 @@ public class GeneratePass extends MJBaseListener {
 	@Override public void enterClassCreator(MJParser.ClassCreatorContext ctx) {
 		if (ctx.createdName().primitiveType() == null) {
 			// must be class type
-			Symbol sym = passData.symbols.get(ctx.createdName());
+			Symbol sym = ctx.createdName().defn;
 			Type symType = null;
 			if (sym != null && sym instanceof ClassSymbol) {
 				symType = (ClassSymbol)sym;
@@ -685,7 +671,7 @@ public class GeneratePass extends MJBaseListener {
 			}
 			currDest.methodBodies.add(");\n");
 			rands.put(ctx, new OutputAtom(rand));
-			setType(ctx, symType);
+			ctx.tipe = symType;
 		} else {
 			Compiler.error(ctx.getStart(), "new cannot be applied to a primitive type", "ClassCreator");
 		}

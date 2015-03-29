@@ -18,3 +18,5 @@ typedef void * errorType;  // TEMPORARY
 typedef struct Class_obj *Class;
 #endif
 extern struct Class_class_obj *Class_class_p;
+
+extern void throwNPE();

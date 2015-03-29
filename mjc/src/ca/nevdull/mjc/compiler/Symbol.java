@@ -12,13 +12,14 @@ public class Symbol implements java.io.Serializable {
     Scope scope;      // All symbols know what scope contains them.
 	Access access;
 
-    public Symbol(String name) {
+    public Symbol(String name, Scope scope) {
     	this.name = name;
     	this.token = null;
+    	this.scope = scope;
     }
 
-    public Symbol(Token nameToken) {
-    	this(nameToken.getText());
+    public Symbol(Token nameToken, Scope scope) {
+    	this(nameToken.getText(), scope);
     	this.token = nameToken;
     }
     
@@ -54,4 +55,9 @@ public class Symbol implements java.io.Serializable {
 		this.access = access;
 		System.out.println(getName()+" setAccess "+access);
 	}
+
+    public String toString() {
+        if ( ! (type == null || type instanceof UnknownType) ) return getName()+":"+type.getName();
+        return getName();
+    }
 }

@@ -7,7 +7,6 @@ import java.io.ObjectInputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.misc.NotNull;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -25,24 +24,20 @@ public class DefinitionPass extends MJBaseListener {
     	super();
     	this.passData = passData;
     }
-
-	private void saveScope(ParserRuleContext ctx, Scope s) {
-    	passData.scopes.put(ctx, s);
+    
+    private void enterScope(Scope newScope) {
+    	System.out.print("enter ");
+	    System.out.print(newScope);
+	    System.out.print(" enclosing=");
+	    System.out.print(newScope.getEnclosingScope());
+	    System.out.println();
+	    currentScope = newScope;
     }
     
-    private void popScope() {
+    private void leaveScope() {
+    	System.out.print("leave ");
 	    System.out.println(currentScope);
 	    currentScope = currentScope.getEnclosingScope();
-    }
-    
-    private void saveSymbol(ParserRuleContext node, Symbol sym) {
-    	passData.symbols.put(node, sym);
-    }
-    
-    private Symbol getSymbol(ParserRuleContext node) {
-    	Symbol sym = passData.symbols.get(node);
-    	assert sym != null;
-    	return sym;
     }
 
     @Override
@@ -51,14 +46,14 @@ public class DefinitionPass extends MJBaseListener {
         //TODO define globals - Object, Class, String
 		ClassSymbol nullClass = new ClassSymbol("_NULL_", passData.globals, null);
 		passData.globals.define(nullClass);
-    	List<String> bootclasspath = (List<String>)passData.options.valuesOf("bootclasspath");
+    	String[] bootclasspath = passData.options.bootClassPath;
     	List<String> nameComponents = new ArrayList<String>();
     	for (String className : preloadClasses) {
     		nameComponents.clear();
     		nameComponents.add(className);
     		importClass(nameComponents, bootclasspath);
     	}
-        currentScope = passData.globals;
+        enterScope(passData.globals);
      }
 
     @Override
@@ -73,21 +68,21 @@ public class DefinitionPass extends MJBaseListener {
     	for (TerminalNode ident : identifiers) {
     		nameComponents.add(ident.getText());
     	}
-    	List<String> classpath = (List<String>)passData.options.valuesOf("classpath");
+    	String[] classpath = passData.options.classPath;
 		importClass(nameComponents, classpath);    	
     }
 
-	private void importClass(List<String> nameComponents, List<String> path) {
+	private void importClass(List<String> nameComponents, String[] classPath) {
 		// Read saved symbols
 		StringBuilder qname = new StringBuilder();
     	for (String nameComponent : nameComponents) {
     		if (qname.length() > 0) qname.append(File.separatorChar);
     		qname.append(nameComponent);
     	}
-    	qname.append(PassData.IMPORT_SUFFIX);
+    	qname.append(Compiler.IMPORT_SUFFIX);
         try {
         	boolean found = false;
-        	for (String pathDir : path) {
+        	for (String pathDir : classPath) {
             	File fname;
         		if (pathDir == null || pathDir.length() == 0) {
         			if (passData.inputDir == null) fname = new File(qname.toString());
@@ -103,7 +98,7 @@ public class DefinitionPass extends MJBaseListener {
                 passData.globals.define(importClass);
                 break;
         	}
-			if (!found) Compiler.error("Not found "+qname+" (path "+path+")");        	
+			if (!found) Compiler.error("Not found "+qname+" (path "+classPath+")");        	
 		} catch (IOException | ClassNotFoundException excp) {
 			Compiler.error("Unable to read symbols "+excp.getMessage());
 		}
@@ -131,7 +126,7 @@ public class DefinitionPass extends MJBaseListener {
 		//LATER could be interfaceDeclaration
 		if (cdecl != null) {
 			System.out.println("exitTypeDeclaration class access "+access);
-			((ClassSymbol)passData.scopes.get(cdecl)).setAccess(access);
+			cdecl.defn.setAccess(access);
 		}
 	}
 	@Override public void exitModifier(@NotNull MJParser.ModifierContext ctx) { }
@@ -139,17 +134,15 @@ public class DefinitionPass extends MJBaseListener {
     
 	@Override 
 	public void enterClassDeclaration(@NotNull MJParser.ClassDeclarationContext ctx) {
-		if (ctx.type() != null) saveScope(ctx.type(), currentScope); // save for ReferencePass to look up superClass
 		ClassSymbol klass = new ClassSymbol(ctx.Identifier().getSymbol(), currentScope, null);
-        saveSymbol(ctx, klass);
+        ctx.defn = klass;
 		currentScope.define(klass);
-        currentScope = klass;
-        saveScope(ctx, currentScope);  //TODO is this needed/used?
+		enterScope(klass);
 	}
 	
 	@Override 
 	public void exitClassDeclaration(@NotNull MJParser.ClassDeclarationContext ctx) {
-        popScope();
+        leaveScope();
 	}
 
 	@Override
@@ -162,56 +155,57 @@ public class DefinitionPass extends MJBaseListener {
         }
         assert currentScope instanceof ClassSymbol;
 		MethodSymbol method = new MethodSymbol(token, currentScope);
-        saveSymbol(ctx, method);
+        ctx.defn = method;
 		((ClassSymbol)currentScope).setConstructor(method);
-        currentScope = method;
-        saveScope(ctx, currentScope);  //TODO is this needed/used?
-	}
+		enterScope(method);
+ 	}
 
 	@Override
 	public void exitConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) {
-        popScope();  // formal parameters
+        leaveScope();  // formal parameters
 	}
 
 	@Override
 	public void enterMethodDeclaration(@NotNull MJParser.MethodDeclarationContext ctx) {
-		if (ctx.type() != null) saveScope(ctx.type(), currentScope); // save for ReferencePass to look up return type
 		MethodSymbol method = new MethodSymbol(ctx.Identifier().getSymbol(), currentScope);
-        saveSymbol(ctx, method);
+        ctx.defn = method;
 		currentScope.define(method);
-        currentScope = method;
-        saveScope(ctx, currentScope);  //TODO is this needed/used?
+		enterScope(method);
 	}
 
 	@Override
 	public void exitMethodDeclaration(@NotNull MJParser.MethodDeclarationContext ctx) {
-        popScope();  // formal parameters
+        leaveScope();  // formal parameters
 	}
 	
 	@Override
 	public void enterFieldDeclaration(@NotNull MJParser.FieldDeclarationContext ctx) {
-		saveScope(ctx.type(), currentScope); // save for ReferencePass to look up field type
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
-			defineVariable(vd.variableDeclaratorId());
+			vd.defn = defineVariable(vd.variableDeclaratorId());
 		}
+	}
+	
+	@Override
+	public void enterClassOrInterfaceType(MJParser.ClassOrInterfaceTypeContext ctx) {
+		ctx.refScope = currentScope;
 	}
 
 	/**
 	 * @param ctx 
 	 * @param t
 	 * @param vdlist
+	 * @return 
 	 */
-	public void defineVariable(MJParser.VariableDeclaratorIdContext vdi) {
-		VarSymbol var = new VarSymbol(vdi.Identifier().getSymbol(),null);
-        saveSymbol(vdi, var);
+	public VariableSymbol defineVariable(MJParser.VariableDeclaratorIdContext vdi) {
+		VariableSymbol var = new VariableSymbol(vdi.Identifier().getSymbol(),null, currentScope);
 		currentScope.define(var);
 		//TODO variableModifiers
+		return var;
 	}
 
 	@Override
 	public void enterFormalParameter(@NotNull MJParser.FormalParameterContext ctx) {
-		saveScope(ctx.type(), currentScope); // save for ReferencePass to look up parameter type
-		defineVariable(ctx.variableDeclaratorId());
+		ctx.defn = defineVariable(ctx.variableDeclaratorId());
 		//TODO variableModifiers
 	}
 	@Override public void exitVariableModifier(@NotNull MJParser.VariableModifierContext ctx) { }
@@ -219,20 +213,18 @@ public class DefinitionPass extends MJBaseListener {
 
 	@Override 
 	public void enterBlock(@NotNull MJParser.BlockContext ctx) {
-        currentScope = new LocalScope(currentScope, ctx.getStart().getLine());
-        saveScope(ctx, currentScope);
+		enterScope(new LocalScope(currentScope, ctx.getStart().getLine()));
 	}
 
 	@Override
 	public void exitBlock(@NotNull MJParser.BlockContext ctx) {
-        popScope();		
+        leaveScope();		
 	}
 	
 	@Override
 	public void enterLocalVariableDeclaration(@NotNull MJParser.LocalVariableDeclarationContext ctx) {
-		saveScope(ctx.type(), currentScope); // save for ReferencePass to look up field type
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
-			defineVariable(vd.variableDeclaratorId());
+			vd.defn = defineVariable(vd.variableDeclaratorId());
 		}
 		//TODO variableModifiers
 		//TODO ensure no declaration of same name in enclosing blocks 
@@ -240,22 +232,22 @@ public class DefinitionPass extends MJBaseListener {
 
 	@Override
 	public void enterSuperPrimary(@NotNull MJParser.SuperPrimaryContext ctx) {
-		saveScope(ctx, currentScope); // save for ReferencePass
+		ctx.refScope = currentScope; // save for ReferencePass
 	}
 	
 	@Override
 	public void enterIdentifierPrimary(@NotNull MJParser.IdentifierPrimaryContext ctx) {
-		saveScope(ctx, currentScope); // save for ReferencePass
+		ctx.refScope = currentScope; // save for ReferencePass
 	}
 	
 	@Override
 	public void enterThisPrimary(@NotNull MJParser.ThisPrimaryContext ctx) {
-		saveScope(ctx, currentScope); // save for ReferencePass
+		ctx.refScope = currentScope; // save for ReferencePass
 	}
 	
 	@Override
 	public void exitCreatedName(MJParser.CreatedNameContext ctx) {
-		saveScope(ctx, currentScope); // save for ReferencePass
+		ctx.refScope = currentScope; // save for ReferencePass
 	}
 
 }

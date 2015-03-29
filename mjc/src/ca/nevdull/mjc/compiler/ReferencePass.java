@@ -2,7 +2,6 @@ package ca.nevdull.mjc.compiler;
 
 import java.util.ListIterator;
 
-import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.misc.NotNull;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -17,27 +16,11 @@ public class ReferencePass extends MJBaseListener {
 		this.passData = passData;
 	}
     
-    private Symbol getSymbol(ParserRuleContext node) {
-    	Symbol sym = passData.symbols.get(node);
-    	assert sym != null;
-    	return sym;
-    }
-    
-    private void setType(ParserRuleContext node, Type type) {
-    	passData.types.put(node, type);
-    }
-    
-    private Type getType(ParserRuleContext node) {
-    	Type t = passData.types.get(node);
-    	assert t != null;
-    	return t;
-    }
-      
     @Override 
 	public void exitClassDeclaration(@NotNull MJParser.ClassDeclarationContext ctx) {
-		ClassSymbol klass = (ClassSymbol)getSymbol(ctx);
+		ClassSymbol klass = ctx.defn;
 		if (ctx.type() != null) {
-			Type t = getType(ctx.type());
+			Type t = ctx.type().tipe;
 			if (t instanceof ClassSymbol) {
 				if (t.getName().equals("_NULL_")) {
 					//no superclass for Object
@@ -59,10 +42,10 @@ public class ReferencePass extends MJBaseListener {
 
 	@Override
 	public void exitMethodDeclaration(@NotNull MJParser.MethodDeclarationContext ctx) {
-		Symbol method = getSymbol(ctx);
+		Symbol method = ctx.defn;
 		Type t;
 		if (ctx.type() != null) {
-			t = getType(ctx.type());
+			t = ctx.type().tipe;
 		} else {
 			t = VoidType.getInstance();
 		}
@@ -72,23 +55,22 @@ public class ReferencePass extends MJBaseListener {
 
 	@Override
 	public void exitConstructorDeclaration(@NotNull MJParser.ConstructorDeclarationContext ctx) {
-		Symbol method = getSymbol(ctx);
+		Symbol method = ctx.defn;
 		Type t = VoidType.getInstance();
 		method.setType(t);
 		System.out.println(method.getName()+" type is "+t.toString());
 	}
 	@Override public void exitFieldDeclaration(MJParser.FieldDeclarationContext ctx) {
-		Type t = getType(ctx.type());
+		Type t = ctx.type().tipe;
 		//System.out.println("exitFieldDeclaration type "+t.toString());
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
-			setVariableType(vd.variableDeclaratorId(), t);
+			setVariableType(vd.defn, vd.variableDeclaratorId(), t);
 		}
 	}
-	public void setVariableType(MJParser.VariableDeclaratorIdContext vdi, Type t) {
-		Symbol var = getSymbol(vdi);
+	public void setVariableType(VariableSymbol defn, MJParser.VariableDeclaratorIdContext vdi, Type t) {
 		t = applyDimensions(vdi.arrayDimension(), t);
-		var.setType(t);
-		System.out.println(var.getName()+" type is "+t.toString());
+		defn.setType(t);
+		System.out.println(defn.getName()+" type is "+t.toString());
 	}
 	@Override public void exitVariableDeclarators(MJParser.VariableDeclaratorsContext ctx) { }
 	@Override public void exitVariableDeclarator(MJParser.VariableDeclaratorContext ctx) { }
@@ -98,11 +80,11 @@ public class ReferencePass extends MJBaseListener {
 	@Override public void exitArrayInitializer(MJParser.ArrayInitializerContext ctx) { }
 	@Override public void exitPrimitType(MJParser.PrimitTypeContext ctx) {
 		//System.out.println("exitPrimitType "+ctx.getText());
-		setType(ctx, applyDimensions(ctx.arrayDimension(), getType(ctx.primitiveType())));
+		ctx.tipe = applyDimensions(ctx.arrayDimension(), ctx.primitiveType().tipe);
 	}
 	@Override public void exitObjectType(MJParser.ObjectTypeContext ctx) {
 		//System.out.println("exitObjectType "+ctx.getText());
-		setType(ctx, applyDimensions(ctx.arrayDimension(), getType(ctx.classOrInterfaceType())));
+		ctx.tipe = applyDimensions(ctx.arrayDimension(), ctx.classOrInterfaceType().tipe);
 	}
 	
 	public Type applyDimensions(MJParser.ArrayDimensionContext ctx, Type t) {
@@ -118,12 +100,12 @@ public class ReferencePass extends MJBaseListener {
 	
 	@Override
 	public void exitClassOrInterfaceType(MJParser.ClassOrInterfaceTypeContext ctx) {
-		Scope scope = passData.scopes.get(ctx.getParent());
+		Scope scope = ctx.refScope;
 		Token name = ctx.Identifier(0).getSymbol();
 		Symbol sym = scope.resolve(name.getText());
         if (sym == null) {
         	Compiler.error(name, name.getText()+" is not defined","exitClassOrInterfaceType");
-			setType(ctx, UnknownType.getInstance());
+        	ctx.tipe = UnknownType.getInstance();
         } else {
 			for (ListIterator<TerminalNode> iter = ctx.Identifier().listIterator(1);
 				 iter.hasNext(); ) {
@@ -146,11 +128,11 @@ public class ReferencePass extends MJBaseListener {
 			}
 			if (sym != null) {  // lookup succeeded
 				if (sym instanceof ClassSymbol) {
-					setType(ctx, (ClassSymbol)sym);
+					ctx.tipe = (ClassSymbol)sym;
 					System.out.println(name.getText()+" type "+sym.getName());
 				} else {
 					Compiler.error(name, name.getText()+" is not a class: "+sym.toString(),"ClassOrInterfaceType");
-					setType(ctx, UnknownType.getInstance());
+					ctx.tipe = UnknownType.getInstance();
 				}
 			}
         }
@@ -159,36 +141,36 @@ public class ReferencePass extends MJBaseListener {
 		//System.out.println("exitArrayDimension "+ctx.getText());
 	}
 	@Override public void exitBooleanType(MJParser.BooleanTypeContext ctx) {
-		setType(ctx, PrimitiveType.booleanType);
+		ctx.tipe = PrimitiveType.booleanType;
 	}
 	@Override public void exitDoubleType(MJParser.DoubleTypeContext ctx) {
-		setType(ctx, PrimitiveType.doubleType);
+		ctx.tipe = PrimitiveType.doubleType;
 	}
 	@Override public void exitCharType(MJParser.CharTypeContext ctx) {
-		setType(ctx, PrimitiveType.charType);
+		ctx.tipe = PrimitiveType.charType;
 	}
 	@Override public void exitFloatType(MJParser.FloatTypeContext ctx) {
-		setType(ctx, PrimitiveType.floatType);
+		ctx.tipe = PrimitiveType.floatType;
 	}
 	@Override public void exitIntType(MJParser.IntTypeContext ctx) {
-		setType(ctx, PrimitiveType.intType);
+		ctx.tipe = PrimitiveType.intType;
 	}
 	@Override public void exitShortType(MJParser.ShortTypeContext ctx) {
-		setType(ctx, PrimitiveType.shortType);
+		ctx.tipe = PrimitiveType.shortType;
 	}
 	@Override public void exitByteType(MJParser.ByteTypeContext ctx) {
-		setType(ctx, PrimitiveType.byteType);
+		ctx.tipe = PrimitiveType.byteType;
 	}
 	@Override public void exitLongType(MJParser.LongTypeContext ctx) {
-		setType(ctx, PrimitiveType.longType);
+		ctx.tipe = PrimitiveType.longType;
 	}
 	@Override public void exitFormalParameters(MJParser.FormalParametersContext ctx) { }
 	@Override public void exitFormalParameterList(MJParser.FormalParameterListContext ctx) { }
 	@Override public void exitFormalParameter(MJParser.FormalParameterContext ctx) {
 		//System.out.println("exitFormalParameter "+ctx.getText());
-		Type t = getType(ctx.type());
+		Type t = ctx.type().tipe;
 		//System.out.println("exitFormalParameter type "+t.toString());
-		setVariableType(ctx.variableDeclaratorId(), t);
+		setVariableType(ctx.defn, ctx.variableDeclaratorId(), t);
 	}
 	@Override public void exitVariableModifier(MJParser.VariableModifierContext ctx) { }
 	@Override public void exitMethodBody(MJParser.MethodBodyContext ctx) { }
@@ -199,10 +181,10 @@ public class ReferencePass extends MJBaseListener {
 	@Override public void exitLocalVariableDeclarationStatement(MJParser.LocalVariableDeclarationStatementContext ctx) { }
 	@Override public void exitLocalVariableDeclaration(MJParser.LocalVariableDeclarationContext ctx) {
 		//System.out.println("exitLocalVariableDeclaration type "+ctx.type().getText());
-		Type t = getType(ctx.type());
+		Type t = ctx.type().tipe;
 		//System.out.println("exitLocalVariableDeclaration type "+t.toString());
 		for (MJParser.VariableDeclaratorContext vd : ctx.variableDeclarators().variableDeclarator()) {
-			setVariableType(vd.variableDeclaratorId(), t);
+			setVariableType(vd.defn, vd.variableDeclaratorId(), t);
 		}
 	}
 
@@ -248,7 +230,7 @@ public class ReferencePass extends MJBaseListener {
 	public void exitIdentifierPrimary(@NotNull MJParser.IdentifierPrimaryContext ctx) {
     	Token token = ctx.Identifier().getSymbol();
         String name = token.getText();
-        Scope refScope = passData.scopes.get(ctx);
+        Scope refScope = ctx.refScope;
         Symbol sym = refScope.resolve(name);
         if (sym == null) {
         	Compiler.error(token, name+" is not defined","IdentifierPrimary");
@@ -264,7 +246,7 @@ public class ReferencePass extends MJBaseListener {
         		Compiler.error(token, name+" is forward local variable reference","IdentifierPrimary");
         		sym = null;
         	} else {
-        		passData.symbols.put(ctx, sym);
+        		ctx.defn = sym;
         	}
         }
 	}
@@ -276,9 +258,9 @@ public class ReferencePass extends MJBaseListener {
 	@Override public void exitCreatedName(MJParser.CreatedNameContext ctx) {
         PrimitiveTypeContext ptc = ctx.primitiveType();
         if (ptc != null) {
-        	setType(ctx, getType(ctx.primitiveType()));
+        	ctx.tipe = ctx.primitiveType().tipe;
 		} else {
-	        Scope refScope = passData.scopes.get(ctx);
+	        Scope refScope = ctx.refScope;
 			Symbol sym = null;
 			for (TerminalNode id : ctx.Identifier()) {
 		    	Token token = id.getSymbol();
@@ -291,7 +273,7 @@ public class ReferencePass extends MJBaseListener {
 		        }
 			}
 			if (sym instanceof ClassSymbol) {
-	    		passData.symbols.put(ctx, sym);
+	    		ctx.defn = sym;
 			} else {
 	        	Compiler.error(sym.getToken(), sym.getName()+" is not a class","CreatedName");
 			}

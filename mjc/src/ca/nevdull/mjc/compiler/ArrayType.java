@@ -10,12 +10,12 @@ public class ArrayType extends Symbol implements Type {
 	 * @param elementType
 	 */
 	public ArrayType(Type elementType) {
-		super(elementType.getName()+"[]");
+		super(elementType.getName()+"[]", null);
 		this.elementType = elementType;
 	}
 
 	public ArrayType() {
-		super("unresolved[]");
+		super("unresolved[]", null);
 		this.elementType = null;
 	}
 	

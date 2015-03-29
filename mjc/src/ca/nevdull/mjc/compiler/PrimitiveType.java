@@ -5,7 +5,7 @@ public class PrimitiveType extends Symbol implements Type {
 	private static final long serialVersionUID = 7696320589029199833L;
 	
 	private PrimitiveType(String name) {
-		super(name);
+		super(name, null);
 	}
 	public String toString() {
 		return name;

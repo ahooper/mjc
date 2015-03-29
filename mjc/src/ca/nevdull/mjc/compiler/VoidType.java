@@ -8,7 +8,7 @@ public class VoidType extends Symbol implements Type {
 	private static final VoidType INSTANCE = new VoidType();
 	 
     private VoidType() {
-    	super("void");
+    	super("void", null);
     }
  
     public static VoidType getInstance() {
