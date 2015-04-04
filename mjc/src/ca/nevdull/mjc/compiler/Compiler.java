@@ -195,6 +195,7 @@ public class Compiler {
 	        PassData passData = new PassData();
 	        passData.options = this;
 	        passData.parser = parser;
+	        passData.inputDir = codePath;
 	        DefinitionPass def = new DefinitionPass(passData);
 	        walker.walk(def, tree);
 	        System.out.println(DIVIDER);

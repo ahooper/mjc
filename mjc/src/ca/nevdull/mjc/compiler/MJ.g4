@@ -31,6 +31,9 @@ grammar MJ;
  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+@header {
+import ca.nevdull.mjc.compiler.util.OutputItem;	
+}
 
 compilationUnit
     :   importDeclaration* typeDeclaration* EOF
@@ -110,7 +113,7 @@ variableDeclaratorId
     :   Identifier arrayDimension
     ;
 
-variableInitializer
+variableInitializer									locals [ OutputItem ref ]
     :   arrayInitializer							# arrayVariableInitializer
     |   expression									# simpleVariableInitializer
     ;
@@ -171,7 +174,7 @@ qualifiedName
     :   Identifier ('.' Identifier)*
     ;
 
-literal												locals [ Type tipe ]
+literal												locals [ Type tipe, OutputItem ref ]
     :   IntegerLiteral
     |   FloatingPointLiteral
     |   CharacterLiteral
@@ -224,7 +227,7 @@ constantExpression
     :   expression
     ;
 
-expression											locals [ Type tipe ]
+expression											locals [ Type tipe, OutputItem ref ]
     :   primary										# primExpression
     |   expression '.' Identifier					# dotExpression
     |   expression '[' expression ']'				# indexExpression
@@ -249,7 +252,7 @@ expression											locals [ Type tipe ]
         expression									# assignExpression
     ;
 
-primary												locals [ Scope refScope, Symbol defn, Type tipe ]
+primary												locals [ Scope refScope, Symbol defn, Type tipe, OutputItem ref ]
     :   '(' expression ')'							# parenPrimary
     |   THIS										# thisPrimary
     |   SUPER										# superPrimary
