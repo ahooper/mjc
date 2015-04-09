@@ -23,6 +23,7 @@ public class ClassSymbol extends ScopingSymbol implements Scope, Type, java.io.S
 	ClassSymbol superClass;
     Map<String, Symbol> members = new LinkedHashMap<String, Symbol>();
     MethodSymbol constructor = null;
+    boolean isAbstract = false;
 
 	public ClassSymbol(Token nameToken, Scope enclosingScope, ClassSymbol superClass) {
 		super(nameToken, enclosingScope);

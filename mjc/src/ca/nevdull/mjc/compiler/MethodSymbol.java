@@ -19,6 +19,7 @@ public class MethodSymbol extends ScopingSymbol implements Scope, Type, java.io.
 	private static final long serialVersionUID = -1161057449253904470L;
 	
 	Map<String, Symbol> parameters = new LinkedHashMap<String, Symbol>();
+	boolean isAbstract = false;
 
 	public MethodSymbol(Token nameToken, Scope enclosingScope) {
 		super(nameToken, enclosingScope);

@@ -11,6 +11,8 @@ public class Symbol implements java.io.Serializable {
 	Type type;
     Scope scope;      // All symbols know what scope contains them.
 	Access access;
+    boolean isFinal = false;
+    boolean isStatic = false;
 
     public Symbol(String name, Scope scope) {
     	this.name = name;
