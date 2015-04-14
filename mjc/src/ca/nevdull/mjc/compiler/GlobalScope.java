@@ -9,8 +9,6 @@ package ca.nevdull.mjc.compiler;
  * Visit http://www.pragmaticprogrammer.com/titles/tpantlr2 for more book information.
 ***/
 public class GlobalScope extends BaseScope {
-	
-	private static final long serialVersionUID = 6219478179582888620L;
 
 	public GlobalScope() {
     	super(null);

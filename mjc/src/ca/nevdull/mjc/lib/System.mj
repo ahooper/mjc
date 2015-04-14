@@ -1,4 +1,15 @@
 public class System {
 
-
+	public static class SysOut {
+	    // temporary during construction
+	    
+	    static void print(String s) native;
+	    
+	    static void println(String s) native;
+	
+	}
+    static SysOut out = new SysOut();
+    
+	public static int identityHashCode(Object o) native;
+    
 }

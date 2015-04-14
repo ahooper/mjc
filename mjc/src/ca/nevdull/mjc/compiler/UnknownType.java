@@ -1,8 +1,10 @@
 package ca.nevdull.mjc.compiler;
 
-public class UnknownType extends Symbol implements Type {
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 
-	private static final long serialVersionUID = 142879997187116054L;
+public class UnknownType extends Symbol implements Type {
 	
 	private static final UnknownType INSTANCE = new UnknownType();
 	 
@@ -17,4 +19,14 @@ public class UnknownType extends Symbol implements Type {
 	public String toString() {
 		return "unknown";
 	}
+
+    public void writeImportTypeContent(DataOutput out)
+            throws IOException {
+    }
+
+    public Type readImportTypeContent(DataInput in)
+            throws IOException {
+    	// only one instance
+		return getInstance();  // discards current instance
+    }
 }

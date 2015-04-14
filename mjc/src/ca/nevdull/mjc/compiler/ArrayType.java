@@ -1,8 +1,10 @@
 package ca.nevdull.mjc.compiler;
 
-public class ArrayType extends Symbol implements Type {
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 
-	private static final long serialVersionUID = 8427707270005661330L;
+public class ArrayType extends Symbol implements Type {
 	
 	Type elementType;
 
@@ -37,5 +39,17 @@ public class ArrayType extends Symbol implements Type {
 		if (elementType == null) return "unresolved[]";
 		return elementType.toString()+"[]";
 	}
+
+    public void writeImportTypeContent(DataOutput out)
+            throws IOException {
+    	out.writeUTF(elementType.getClass().getSimpleName());
+    	elementType.writeImportTypeContent(out);
+    }
+
+    public Type readImportTypeContent(DataInput in)
+            throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException {
+		elementType = Symbol.readImportType(in);
+		return this;
+    }
 
 }

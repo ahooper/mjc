@@ -1,12 +1,12 @@
 package ca.nevdull.mjc.compiler;
 
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.PrintStream;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -17,11 +17,6 @@ import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
-
-import ca.nevdull.mjc.compiler.MJParser.ClassOrInterfaceModifierContext;
-import ca.nevdull.mjc.compiler.util.OutputAtom;
-import ca.nevdull.mjc.compiler.util.OutputItem;
-import ca.nevdull.mjc.compiler.util.OutputList;
 
 public class CodeVisitor {
 	PassData passData;
@@ -34,6 +29,7 @@ public class CodeVisitor {
 	}
 	
 	////////////////////////////////////////////////////////////////////////////
+	// Tracing methods
 
 	boolean traceVisit = false;
 	int nest = 0;
@@ -86,6 +82,7 @@ public class CodeVisitor {
 	}
 	
 	////////////////////////////////////////////////////////////////////////////
+	//TODO this should go away after all parse tree structures are coded
 	
 	private void put(TerminalNode id) {
 		put(id.getSymbol().getText());
@@ -96,28 +93,33 @@ public class CodeVisitor {
 	}
 	
 	////////////////////////////////////////////////////////////////////////////
+	// Translation of Java types to C implementation
 	
     Map<PrimitiveType,String> primitiveTypeMap = new IdentityHashMap<PrimitiveType,String>();   
     {
-    	primitiveTypeMap.put(PrimitiveType.booleanType, "jboolean");
-    	primitiveTypeMap.put(PrimitiveType.byteType, "jbyte");
-    	primitiveTypeMap.put(PrimitiveType.charType, "jchar");
-    	primitiveTypeMap.put(PrimitiveType.doubleType, "jdouble");
-    	primitiveTypeMap.put(PrimitiveType.floatType, "jfloat");
-    	primitiveTypeMap.put(PrimitiveType.intType, "jint");
-    	primitiveTypeMap.put(PrimitiveType.longType, "jlong");
-    	primitiveTypeMap.put(PrimitiveType.shortType, "jshort");
+    	primitiveTypeMap.put(PrimitiveType.booleanType,	"jboolean");
+    	primitiveTypeMap.put(PrimitiveType.byteType,	"jbyte");
+    	primitiveTypeMap.put(PrimitiveType.charType,	"jchar");
+    	primitiveTypeMap.put(PrimitiveType.doubleType,	"jdouble");
+    	primitiveTypeMap.put(PrimitiveType.floatType,	"jfloat");
+    	primitiveTypeMap.put(PrimitiveType.intType,		"jint");
+    	primitiveTypeMap.put(PrimitiveType.longType,	"jlong");
+    	primitiveTypeMap.put(PrimitiveType.shortType,	"jshort");
     }
 	
 	////////////////////////////////////////////////////////////////////////////
+    // C variable names to hold intermediate values
     
     int reg = 1;
     public int nextreg() {
     	return reg++;
     }
     
+    // String literals
+    
     int stringnum = 1;
     Map<String, Integer> strings = new HashMap<String, Integer>();
+    
     public int stringId(String s) {
     	Integer id = strings.get(s);
     	if (id == null) {
@@ -134,23 +136,20 @@ public class CodeVisitor {
      */
   
     class BlockDest {
-    	BlockDest enclosingBlock;
-    	OutputList destination;
+    	private BlockDest enclosingBlock;
     	OutputList intermediateDeclarations;
     	OutputList code;
     	
     	public BlockDest(BlockDest enclosingBlock) {
-    		super();
-    		this.enclosingBlock = enclosingBlock;
-    		this.intermediateDeclarations = new OutputList();
-    		this.code = new OutputList();
+    		this(enclosingBlock,enclosingBlock.code);
     	}
+    	
     	public BlockDest(BlockDest enclosingBlock, OutputList destination) {
     		super();
     		this.enclosingBlock = enclosingBlock;
     		this.intermediateDeclarations = new OutputList();
     		this.code = new OutputList();
-    		this.destination.add(this.intermediateDeclarations).add(this.code);
+    		destination.add("{\n").add(this.intermediateDeclarations).add(this.code).add("}\n");
     	}
     	
     	public BlockDest close() {
@@ -195,8 +194,8 @@ public class CodeVisitor {
 
 		private File makeFilePath(String suffix) {
 			String name = getFileName()+suffix;
-			return passData.inputDir == null ? new File(name)
-											 : new File(passData.inputDir,name);
+			return passData.outputDir == null ? new File(name)
+											 : new File(passData.outputDir,name);
 		}
 		
 		public void beginBlock(OutputList dest) {
@@ -204,6 +203,7 @@ public class CodeVisitor {
 		}
 
 		public void beginBlock() {
+			assert block != null;
 			block = new BlockDest(block);
 		}
 		
@@ -235,6 +235,14 @@ public class CodeVisitor {
     ClassDest currDest = null;
 	OutputList imports = new OutputList();
 
+	private void sourceComment(ParserRuleContext ctx) {
+		if (currDest.block != null) {
+			currDest.block.code.add("// ",Integer.toString(ctx.getStart().getLine()),": ",ctx.getText(),"\n");
+		} else {
+			currDest.methodBodies.add("// ",Integer.toString(ctx.getStart().getLine()),": ",ctx.getText(),"\n");			
+		}
+	}
+
 	////////////////////////////////////////////////////////////////////////////
 
     public Void visitCompilationUnit(MJParser.CompilationUnitContext ctx) {
@@ -247,6 +255,7 @@ public class CodeVisitor {
     
     public Void visitImportDeclaration(MJParser.ImportDeclarationContext ctx) {
         if (traceVisit) traceIn("visitImportDeclaration");
+		sourceComment(ctx);
 		// TODO Read saved symbols
     	StringBuilder qname = new StringBuilder();
     	for (TerminalNode nameComponent : ctx.qualifiedName().Identifier()) {
@@ -264,7 +273,7 @@ public class CodeVisitor {
     public Void visitTypeDeclaration(MJParser.TypeDeclarationContext ctx) {
         if (traceVisit) traceIn("visitTypeDeclaration");
         MJParser.ClassDeclarationContext c1 = ctx.classDeclaration();  if (c1 != null) {
-        	visitClassDeclaration(ctx.classOrInterfaceModifier(),c1);
+        	visitClassDeclaration(c1);
         } else {
         }
         if (traceVisit) traceOut("visitTypeDeclaration");
@@ -283,14 +292,7 @@ public class CodeVisitor {
         return null;
     }
     
-    private void applyAccessModifier(Symbol sym, TerminalNode mod, Access acc) {
-    	if (mod != null) {
-    		if (sym.access == null) sym.access = acc;
-    		else Compiler.error(mod,"only one access modifier is allowed");
-    	}
-    }
-    
-    public Void visitClassDeclaration(List<MJParser.ClassOrInterfaceModifierContext> modifiers, MJParser.ClassDeclarationContext ctx) {
+    public Void visitClassDeclaration(MJParser.ClassDeclarationContext ctx) {
         if (traceVisit) traceIn("visitClassDeclaration");
         MJParser.TypeContext t = ctx.type();  if (t != null) {
         	visitType(t);
@@ -302,17 +304,7 @@ public class CodeVisitor {
 		if (sup != null) {
 	    	superName = sup.getName();
 		}
-        for (MJParser.ClassOrInterfaceModifierContext c : modifiers) { 
-        	visitClassOrInterfaceModifier(c);
-        	applyAccessModifier(classSymbol, c.PUBLIC(), Access.AccessPublic);
-        	applyAccessModifier(classSymbol, c.PROTECTED(), Access.AccessProtected);
-        	applyAccessModifier(classSymbol, c.PRIVATE(), Access.AccessPrivate);
-    		if (c.STATIC() != null) classSymbol.isStatic = true;
-    		if (c.ABSTRACT() != null) classSymbol.isAbstract = true;
-    		if (c.FINAL() != null) classSymbol.isFinal = true;
-    		// not fussing if static, abstract, or final modifiers are repeated
-        }
-		if (classSymbol.access == null) classSymbol.access = Access.AccessDefault;
+		if (classSymbol.access == null) classSymbol.setAccess(Access.AccessDefault);
 		currDest = new ClassDest(ctx.defn, currDest);
 		
 		currDest.classStructure.add("#ifndef ",className,"_DEFN\n")
@@ -351,9 +343,9 @@ public class CodeVisitor {
 		// Save symbols for import
         try {
 			FileOutputStream fos = new FileOutputStream(currDest.makeFilePath(Compiler.IMPORT_SUFFIX));
-	        ObjectOutputStream oos = new ObjectOutputStream(fos);
-			oos.writeObject(classSymbol);
-	        oos.close();
+	        DataOutputStream dos = new DataOutputStream(fos);
+	        classSymbol.writeImport(dos);
+	        dos.close();
 		} catch (IOException excp) {
 			Compiler.error("Unable to write symbols "+excp.getMessage());
 		}
@@ -378,15 +370,20 @@ public class CodeVisitor {
     }
 
 	private void defineDefaultConstructor(ClassSymbol classSymbol) {
+/*
 		Token token = classSymbol.getToken();
 		MethodSymbol method = new MethodSymbol(token, classSymbol);
 		classSymbol.define(method);
 		method.setType(VoidType.getInstance());
 		beginMethod(method.getName(), method.getType());
+*/
+		beginMethod("_init", classSymbol);
 		beginFormalParameters(classSymbol.getName());
 		endFormalParameters();
-		beginBlock();
-		endBlock();
+        currDest.beginBlock(currDest.methodBodies);
+		currDest.block.code.add(indent,"/*defaultConstructor*/\n");
+		currDest.block.code.add(indent,"return this;\n");
+        currDest.endBlock();
 		endMethod();
 	}
 
@@ -394,10 +391,9 @@ public class CodeVisitor {
 		String className = classSymbol.getName();
 		//TODO should be a static method (no "this" parameter)
 		beginMethod("_create", classSymbol);
-		beginFormalParameters(className); //TODO eliminate formal parameter
+		beginFormalParameters(null/*no 'this' parameter*/);
 		endFormalParameters();
-		beginBlock();
-		currDest.methodBodies.add(indent,"/* 'this' will always be NULL */\n")
+		currDest.methodBodies.add("{\n")
 							 .add(indent,"if (",className,"_class._class == NULL) {\n")
 							 .add(indent,indent,className,"_class._class = Class_class_p;\n")
 							 .add(indent,indent,"// class initialization\n")
@@ -409,8 +405,8 @@ public class CodeVisitor {
 		currDest.methodBodies.add(indent,"new->_class=&",className,"_class;\n")
 							 .add(indent,"// instance initialization\n")
 							 .add(currDest.instanceInitialization)
-							 .add(indent,"return new;\n");
-		endBlock();
+							 .add(indent,"return new;\n")
+							 .add("}\n");
 		endMethod();
 	}
     
@@ -426,15 +422,19 @@ public class CodeVisitor {
     }
     public Void visitBlockClassBodyDeclaration(MJParser.BlockClassBodyDeclarationContext ctx) {
         if (traceVisit) traceIn("visitBlockClassBodyDeclaration");
-        TerminalNode s;  if ((s = ctx.STATIC()) != null) put(s);
+        TerminalNode s = ctx.STATIC();
+        if (s != null) currDest.beginBlock(currDest.classInitialization);
+        else currDest.beginBlock(currDest.instanceInitialization);
+        //TODO if static, limit access within block
         MJParser.BlockContext b = ctx.block();  if (b != null) visitBlock(b);
+        currDest.endBlock();
         if (traceVisit) traceOut("visitBlockClassBodyDeclaration");
         return null;
     }
     public Void visitMemberClassBodyDeclaration(MJParser.MemberClassBodyDeclarationContext ctx) {
         if (traceVisit) traceIn("visitMemberClassBodyDeclaration");
         for (MJParser.ModifierContext m : ctx.modifier()) visitModifier(m);
-        MJParser.MemberDeclarationContext md = ctx.memberDeclaration();  if (md != null) visitMemberDeclaration(ctx.modifier(),md);
+        MJParser.MemberDeclarationContext md = ctx.memberDeclaration();  if (md != null) visitMemberDeclaration(md);
         if (traceVisit) traceOut("visitMemberClassBodyDeclaration");
         return null;
     }
@@ -446,35 +446,24 @@ public class CodeVisitor {
         else fail("visitClassBodyDeclaration unrecognized "+ctx.getClass().getSimpleName());
         return null;
     }
-    public Void visitMemberDeclaration(List<MJParser.ModifierContext> modifiers, MJParser.MemberDeclarationContext ctx) {
+    public Void visitMemberDeclaration(MJParser.MemberDeclarationContext ctx) {
         if (traceVisit) traceIn("visitMemberDeclaration");
-        MJParser.MethodDeclarationContext m = ctx.methodDeclaration();  if (m != null) visitMethodDeclaration(modifiers,m);
-        MJParser.FieldDeclarationContext f = ctx.fieldDeclaration();  if (f != null) visitFieldDeclaration(modifiers,f);
-        MJParser.ConstructorDeclarationContext co = ctx.constructorDeclaration();  if (co != null) visitConstructorDeclaration(modifiers,co);
+        MJParser.MethodDeclarationContext m = ctx.methodDeclaration();  if (m != null) visitMethodDeclaration(m);
+        MJParser.FieldDeclarationContext f = ctx.fieldDeclaration();  if (f != null) visitFieldDeclaration(f);
+        MJParser.ConstructorDeclarationContext co = ctx.constructorDeclaration();  if (co != null) visitConstructorDeclaration(co);
         MJParser.ClassDeclarationContext cl = ctx.classDeclaration();  if (cl != null) {
-        	List<MJParser.ClassOrInterfaceModifierContext> classModifiers = takeClassModifiers(modifiers);
-        	visitClassDeclaration(classModifiers,cl);
+        	visitClassDeclaration(cl);
         }
         if (traceVisit) traceOut("visitMemberDeclaration");
         return null;
     }
-	private List<MJParser.ClassOrInterfaceModifierContext> takeClassModifiers(List<MJParser.ModifierContext> modifiers) {
-		List<MJParser.ClassOrInterfaceModifierContext> classModifiers = new ArrayList<MJParser.ClassOrInterfaceModifierContext>();
-		for (MJParser.ModifierContext mod : modifiers) {
-			ClassOrInterfaceModifierContext cim = mod.classOrInterfaceModifier();
-			if (cim != null) classModifiers.add(cim);
-			else Compiler.error(mod.start,"modifier not applicable to class declaration");
-		}
-		return classModifiers;
-	}
-    public Void visitMethodDeclaration(List<MJParser.ModifierContext> modifiers, MJParser.MethodDeclarationContext ctx) {
+    public Void visitMethodDeclaration(MJParser.MethodDeclarationContext ctx) {
         if (traceVisit) traceIn("visitMethodDeclaration");
 		MethodSymbol method = (MethodSymbol)ctx.defn;
-		applyMemberModifiers(method, modifiers);
         MJParser.TypeContext t;
         MJParser.MethodBodyContext m = ctx.methodBody();  
         if (m != null) {
-        	if (method.isAbstract) Compiler.error(ctx.start,"abstract methd may not have an implementation");
+        	if (method.isAbstract) Compiler.error(ctx.start,"abstract method may not have an implementation");
         } else if (ctx.NATIVE() != null) {
         	currDest.methodBodies.add("extern ");
         } else {
@@ -510,63 +499,46 @@ public class CodeVisitor {
 		currDest.methodBodies.add("\n");
 	}
 
-	public Void visitConstructorDeclaration(List<MJParser.ModifierContext> modifiers, MJParser.ConstructorDeclarationContext ctx) {
+	public Void visitConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) {
         if (traceVisit) traceIn("visitConstructorDeclaration");
 		Symbol method = ctx.defn;
-		beginMethod(method.getName(), method.getType());
+		beginMethod("_init", method.getType());
 		currDest.haveConstructor = true;
         MJParser.FormalParametersContext f = ctx.formalParameters();  if (f != null) visitFormalParameters(f);
         MJParser.ConstructorBodyContext b = ctx.constructorBody();  if (b != null) visitConstructorBody(b);
+		currDest.methodBodies.add(indent,"return this;\n");
 		endMethod();
         if (traceVisit) traceOut("visitConstructorDeclaration");
         return null;
     }
-	private void applyMemberModifiers(Symbol sym, List<MJParser.ModifierContext> modifiers) {
-		if (modifiers == null) return;
-        for (MJParser.ModifierContext m : modifiers) { 
-        	visitModifier(m);
-        	ClassOrInterfaceModifierContext cm = m.classOrInterfaceModifier();
-        	applyAccessModifier(sym, cm.PUBLIC(), Access.AccessPublic);
-        	applyAccessModifier(sym, cm.PROTECTED(), Access.AccessProtected);
-        	applyAccessModifier(sym, cm.PRIVATE(), Access.AccessPrivate);
-    		if (cm.STATIC() != null) sym.isStatic = true;
-    		if (cm.ABSTRACT() != null) {
-    			if (sym instanceof MethodSymbol) {
-    				((MethodSymbol) sym).isAbstract = true;
-    			} else if (sym instanceof ClassSymbol) {
-    				((ClassSymbol) sym).isAbstract = true;
-    			} else Compiler.error(cm.start,"modifier is not applicable");
-    		}
-    		if (cm.FINAL() != null) sym.isFinal = true;
-    		// not fussing if static, abstract, or final modifiers are repeated
-        }
-		if (sym.access == null) sym.access = Access.AccessDefault;
-	}
-    public Void visitFieldDeclaration(List<MJParser.ModifierContext> modifiers, MJParser.FieldDeclarationContext ctx) {
+    public Void visitFieldDeclaration(MJParser.FieldDeclarationContext ctx) {
         if (traceVisit) traceIn("visitFieldDeclaration");
+		sourceComment(ctx);
 		//LATER could order fields by descending alignment
         MJParser.TypeContext t = ctx.type();  if (t != null) visitType(t);
-        MJParser.VariableDeclaratorsContext v = ctx.variableDeclarators();  if (v != null) visitVariableDeclarators(modifiers, v,currDest.instanceStructure,currDest.instanceInitialization);  //TODO classInitialization if static
+        MJParser.VariableDeclaratorsContext v = ctx.variableDeclarators();  if (v != null) visitVariableDeclarators(v,currDest.instanceStructure,currDest.instanceInitialization);  //TODO classInitialization if static
         if (traceVisit) traceOut("visitFieldDeclaration");
         return null;
     }
-    public Void visitVariableDeclarators(List<MJParser.ModifierContext> modifiers, MJParser.VariableDeclaratorsContext ctx, OutputList decl, OutputList init) {
+    public Void visitVariableDeclarators(MJParser.VariableDeclaratorsContext ctx, OutputList decl, OutputList init) {
         if (traceVisit) traceIn("visitVariableDeclarators");
         for (MJParser.VariableDeclaratorContext v : ctx.variableDeclarator()) {
-        	visitVariableDeclarator(modifiers,v,decl,init);
+        	visitVariableDeclarator(v,decl,init);
         }
         if (traceVisit) traceOut("visitVariableDeclarators");
         return null;
     }
-    public Void visitVariableDeclarator(List<MJParser.ModifierContext> modifiers, MJParser.VariableDeclaratorContext ctx, OutputList decl, OutputList init) {
+    public Void visitVariableDeclarator(MJParser.VariableDeclaratorContext ctx, OutputList decl, OutputList init) {
         if (traceVisit) traceIn("visitVariableDeclarator");
         MJParser.VariableDeclaratorIdContext v = ctx.variableDeclaratorId();  if (v != null) visitVariableDeclaratorId(v);
 		Symbol sym = ctx.defn;
 		decl.add(indent).add(typeName(sym.getName(), sym.getType())).add(";\n");
-		applyMemberModifiers(sym, modifiers);
         MJParser.VariableInitializerContext v1 = ctx.variableInitializer();  if (v1 != null) {
+            if (sym.isStatic) currDest.beginBlock(currDest.classInitialization);
+            else currDest.beginBlock(currDest.instanceInitialization);
         	visitVariableInitializer(v1,init);
 			init.add(indent).add(sym.getName(),"=").add(v1.ref).add(";\n");
+			endBlock();
         }
         if (traceVisit) traceOut("visitVariableDeclarator");
         return null;
@@ -603,6 +575,7 @@ public class CodeVisitor {
     public Void visitSimpleVariableInitializer(MJParser.SimpleVariableInitializerContext ctx, OutputList init) {
         if (traceVisit) traceIn("visitSimpleVariableInitializer");
         MJParser.ExpressionContext e = ctx.expression();  if (e != null) visitExpression(e);
+        ctx.tipe = e.tipe;
         ctx.ref = e.ref;
         if (traceVisit) traceOut("visitSimpleVariableInitializer");
         return null;
@@ -741,8 +714,12 @@ public class CodeVisitor {
     }
 
 	private void beginFormalParameters(String className) {
-		currDest.classStructure.add("(",className," ","this");
-		currDest.methodBodies.add("(",className," ","this");
+		currDest.classStructure.add("(");
+		currDest.methodBodies.add("(");
+		if (className != null) {
+			currDest.classStructure.add(className," ","this");
+			currDest.methodBodies.add(className," ","this");
+		}
 	}
 	private void endFormalParameters() {
 		currDest.classStructure.add(")");
@@ -755,13 +732,17 @@ public class CodeVisitor {
     }
     public Void visitMethodBody(MJParser.MethodBodyContext ctx) {
         if (traceVisit) traceIn("visitMethodBody");
+        currDest.beginBlock(currDest.methodBodies);
         MJParser.BlockContext b = ctx.block();  if (b != null) visitBlock(b);
+        currDest.endBlock();
         if (traceVisit) traceOut("visitMethodBody");
         return null;
     }
     public Void visitConstructorBody(MJParser.ConstructorBodyContext ctx) {
         if (traceVisit) traceIn("visitConstructorBody");
+        currDest.beginBlock(currDest.methodBodies);
         MJParser.BlockContext b = ctx.block();  if (b != null) visitBlock(b);
+        currDest.endBlock();
         if (traceVisit) traceOut("visitConstructorBody");
         return null;
     }
@@ -817,10 +798,8 @@ public class CodeVisitor {
 
 	private void beginBlock() {
 		currDest.beginBlock();
-		currDest.block.intermediateDeclarations.add("{\n");
 	}
 	private void endBlock() {
-		currDest.block.code.add("}\n");
 		currDest.endBlock();
 	}
 
@@ -833,6 +812,7 @@ public class CodeVisitor {
     }
     public Void visitLocalVariableDeclarationStatement(MJParser.LocalVariableDeclarationStatementContext ctx) {
         if (traceVisit) traceIn("visitLocalVariableDeclarationStatement");
+		sourceComment(ctx);
         MJParser.LocalVariableDeclarationContext l = ctx.localVariableDeclaration();  if (l != null) visitLocalVariableDeclaration(l);
         if (traceVisit) traceOut("visitLocalVariableDeclarationStatement");
         return null;
@@ -843,7 +823,7 @@ public class CodeVisitor {
         MJParser.TypeContext t = ctx.type();  if (t != null) visitType(t);
         MJParser.VariableDeclaratorsContext v1 = ctx.variableDeclarators();  if (v1 != null) {
         	//TODO ctx.variableModifier()
-        	visitVariableDeclarators(null,v1,currDest.block.intermediateDeclarations,currDest.block.code);
+        	visitVariableDeclarators(v1,currDest.block.intermediateDeclarations,currDest.block.code);
         }
         if (traceVisit) traceOut("visitLocalVariableDeclaration");
         return null;
@@ -878,6 +858,7 @@ public class CodeVisitor {
     }
     public Void visitReturnStatement(MJParser.ReturnStatementContext ctx) {
         if (traceVisit) traceIn("visitReturnStatement");
+		sourceComment(ctx);
         //TODO check return type
         MJParser.ExpressionContext e = ctx.expression();  if (e != null) {
         	visitExpression(e);
@@ -888,21 +869,22 @@ public class CodeVisitor {
         if (traceVisit) traceOut("visitReturnStatement");
         return null;
     }
-    public Void visitEmnptyStatement(MJParser.EmnptyStatementContext ctx) {
-        if (traceVisit) traceIn("visitEmnptyStatement");
-		currDest.block.code.add("// ",Integer.toString(ctx.getStart().getLine()),": ",ctx.getText(),"\n");
-        if (traceVisit) traceOut("visitEmnptyStatement");
+    public Void visitEmptyStatement(MJParser.EmptyStatementContext ctx) {
+        if (traceVisit) traceIn("visitEmptyStatement");
+		sourceComment(ctx);
+        if (traceVisit) traceOut("visitEmptyStatement");
         return null;
     }
     public Void visitExpressionStatement(MJParser.ExpressionStatementContext ctx) {
         if (traceVisit) traceIn("visitExpressionStatement");
-		currDest.block.code.add("// ",Integer.toString(ctx.getStart().getLine()),": ",ctx.getText(),"\n");
+		sourceComment(ctx);
         MJParser.StatementExpressionContext s = ctx.statementExpression();  if (s != null) visitStatementExpression(s);
         if (traceVisit) traceOut("visitExpressionStatement");
         return null;
     }
     public Void visitLabelStatement(MJParser.LabelStatementContext ctx) {
         if (traceVisit) traceIn("visitLabelStatement");
+		sourceComment(ctx);
         put(ctx.Identifier());
         put(":");
         MJParser.StatementContext s = ctx.statement();  if (s != null) visitStatement(s);
@@ -915,7 +897,7 @@ public class CodeVisitor {
         else if (ctx instanceof MJParser.IfStatementContext) visitIfStatement((MJParser.IfStatementContext) ctx);
         else if (ctx instanceof MJParser.WhileStatementContext) visitWhileStatement((MJParser.WhileStatementContext) ctx);
         else if (ctx instanceof MJParser.ReturnStatementContext) visitReturnStatement((MJParser.ReturnStatementContext) ctx);
-        else if (ctx instanceof MJParser.EmnptyStatementContext) visitEmnptyStatement((MJParser.EmnptyStatementContext) ctx);
+        else if (ctx instanceof MJParser.EmptyStatementContext) visitEmptyStatement((MJParser.EmptyStatementContext) ctx);
         else if (ctx instanceof MJParser.ExpressionStatementContext) visitExpressionStatement((MJParser.ExpressionStatementContext) ctx);
         else if (ctx instanceof MJParser.LabelStatementContext) visitLabelStatement((MJParser.LabelStatementContext) ctx);
         else fail("visitStatement unrecognized "+ctx.getClass().getSimpleName());
@@ -923,9 +905,8 @@ public class CodeVisitor {
     }
     public Void visitParExpression(MJParser.ParExpressionContext ctx) {
         if (traceVisit) traceIn("visitParExpression");
-        put("(");
+		sourceComment(ctx);
         MJParser.ExpressionContext e = ctx.expression();  if (e != null) visitExpression(e);
-        put(")");
         if (traceVisit) traceOut("visitParExpression");
         return null;
     }
@@ -992,7 +973,7 @@ public class CodeVisitor {
     }
 
 	private OutputList checkRef(OutputList out, OutputItem ref) {
-		return out.add("((").add(ref).add(")?:throwNPE())");  //gcc extension
+		return out.add("checkPtr(").add(ref).add(")");
 	}
     public Void visitIndexExpression(MJParser.IndexExpressionContext ctx) {
         if (traceVisit) traceIn("visitIndexExpression");
@@ -1016,7 +997,8 @@ public class CodeVisitor {
 		Type type = ((MethodSymbol)e.tipe).getType();  //getType(ctx.expression());
 		if (!(type instanceof VoidType)) {
 			String temp = "_e"+nextreg();
-			currDest.block.code.add(indent).add(typeName(temp,type)).add("=");
+			currDest.block.intermediateDeclarations.add(indent).add(typeName(temp,type)).add(";\n");
+			currDest.block.code.add(indent).add(temp).add("=");
 			ctx.ref = new OutputAtom(temp);
 		} else {
 			currDest.block.code.add(indent);
@@ -1030,8 +1012,9 @@ public class CodeVisitor {
     }
     public Void visitNewExpression(MJParser.NewExpressionContext ctx) {
         if (traceVisit) traceIn("visitNewExpression");
-        put(ctx.NEW());
         MJParser.CreatorContext c = ctx.creator();  if (c != null) visitCreator(c);
+        ctx.tipe = c.tipe;
+        ctx.ref = c.ref;
         if (traceVisit) traceOut("visitNewExpression");
         return null;
     }
@@ -1064,7 +1047,8 @@ public class CodeVisitor {
 		Type typeRight = right.tipe;
 		Type typeResult = leftType;  //TODO determine result type
 		String temp = "_e"+nextreg();
-		currDest.block.code.add(indent).add(typeName(temp,typeResult)).add("=").add(left.ref).add(op).add(right.ref).add(";\n");
+		currDest.block.intermediateDeclarations.add(indent).add(typeName(temp,typeResult)).add(";\n");
+		currDest.block.code.add(indent).add(temp).add(" = (").add(left.ref).add(op).add(right.ref).add(");\n");
 		ctx.ref = new OutputAtom(temp);
 	}
 
@@ -1093,7 +1077,8 @@ public class CodeVisitor {
         MJParser.ExpressionContext e = ctx.expression(0);  if (e != null) visitExpression(e);
         MJParser.ExpressionContext e1 = ctx.expression(1);  if (e1 != null) visitExpression(e1);
 		//TODO types
-		String op = ctx.getChild(1).getText();
+		String op = ctx.getChild(1).getText()+ctx.getChild(2).getText();
+		if (ctx.getChildCount() == 5) op += ctx.getChild(2).getText();  // > > >
 		binaryOperator(ctx, e, op, e1); 
         if (traceVisit) traceOut("visitShiftExpression");
         return null;
@@ -1102,17 +1087,21 @@ public class CodeVisitor {
         if (traceVisit) traceIn("visitCompareExpression");
         MJParser.ExpressionContext e = ctx.expression(0);  if (e != null) visitExpression(e);
         MJParser.ExpressionContext e1 = ctx.expression(1);  if (e1 != null) visitExpression(e1);
-		//TODO types
+		//TODO types, boolean result
 		String op = ctx.getChild(1).getText();
-		binaryOperator(ctx, e, op, e1); 
+		binaryOperator(ctx, e, op, e1);
+		ctx.ref = new OutputList().add("toBoolean(").add(ctx.ref).add(")");
         if (traceVisit) traceOut("visitCompareExpression");
         return null;
     }
     public Void visitEqualExpression(MJParser.EqualExpressionContext ctx) {
         if (traceVisit) traceIn("visitEqualExpression");
         MJParser.ExpressionContext e = ctx.expression(0);  if (e != null) visitExpression(e);
-        put((TerminalNode) ctx.getChild(1));
         MJParser.ExpressionContext e1 = ctx.expression(1);  if (e1 != null) visitExpression(e1);
+		//TODO types, boolean result
+		String op = ctx.getChild(1).getText();
+		binaryOperator(ctx, e, op, e1); 
+		ctx.ref = new OutputList().add("toBoolean(").add(ctx.ref).add(")");
         if (traceVisit) traceOut("visitEqualExpression");
         return null;
     }
@@ -1161,24 +1150,46 @@ public class CodeVisitor {
     }
     public Void visitAssignExpression(MJParser.AssignExpressionContext ctx) {
         if (traceVisit) traceIn("visitAssignExpression");
-        //System.out.println(ctx.toStringTree(passData.parser));
         MJParser.ExpressionContext e = ctx.expression(0);  if (e != null) visitExpression(e);
         MJParser.ExpressionContext e1 = ctx.expression(1);  if (e1 != null) visitExpression(e1);
-		//System.out.println("exitAssignExpression e");  printContextTree(e,"    ");
-		Symbol sym = e.defn;
-		if (sym == null) {
-			Compiler.error(e.getStop(), e.getText()+" is not a variable or field","AssignExpression");
-			return null;
-		} else if (!(sym instanceof VariableSymbol)) {
-			Compiler.error(e.getStop(), e.getText()+" is not a variable or field","AssignExpression");
-			return null;
+		System.out.println("visitAssignExpression e");  printContextTree(e,"    ");
+        MJParser.ExpressionContext d = e;		
+		while (true) {
+	        if (d instanceof MJParser.PrimExpressionContext) {
+	        	MJParser.PrimaryContext p = ((MJParser.PrimExpressionContext) d).primary();
+	        	if (p instanceof MJParser.ParenPrimaryContext) {
+	        		d = ((MJParser.ParenPrimaryContext) p).expression();
+	        	} if (p instanceof MJParser.IdentifierPrimaryContext) {
+	        		break;
+	        	} else {
+	        		Compiler.error(p.stop,"not assignable","AssignExpression");
+	        		d = null;
+	        		break;
+	        	}
+	        } else if (d instanceof MJParser.DotExpressionContext) {
+	        	break;
+	        } else if (d instanceof MJParser.IndexExpressionContext) {
+	        	break;
+	        //not valid} else if (d instanceof MJParser.CallExpressionContext){
+	        	
+	        //not valid} else if (d instanceof MJParser.NewExpressionContext){
+	        	
+	        //?can this be valid?} else if (d instanceof MJParser.CastExpressionContext){
+	        	
+	        //?can this be valid?} else if (d instanceof MJParser.AssignExpressionContext){
+	        	
+	        } else {
+	        	Compiler.error(d.stop,"not assignable","AssignExpression");
+	        	d = null;
+	        	break;
+	        }
 		}
-		MJParser.ExpressionContext val = ctx.expression(1);
-		Type type = val.tipe;
+		Type type = e1.tipe;
 		if (!(type instanceof PrimitiveType || type instanceof ClassSymbol)) {
 			Compiler.error(e.getStop(), "not an assignable value","AssignExpression");
 		}
 		currDest.block.code.add(indent).add(e.ref).add("=").add(e1.ref).add(";\n");
+		ctx.tipe = e.tipe;
 		ctx.ref = e.ref;
         if (traceVisit) traceOut("visitAssignExpression");
         return null;
@@ -1292,6 +1303,31 @@ public class CodeVisitor {
         if (traceVisit) traceIn("visitClassCreator");
         MJParser.CreatedNameContext c = ctx.createdName();  if (c != null) visitCreatedName(c);
         MJParser.ClassCreatorRestContext c1 = ctx.classCreatorRest();  if (c1 != null) visitClassCreatorRest(c1);
+		if (ctx.createdName().primitiveType() != null) {
+			Compiler.error(ctx.getStart(), "new cannot be applied to a primitive type", "ClassCreator");
+		} else {
+			// must be class type
+			Symbol sym = ctx.createdName().defn;
+			Type symType = null;
+			if (sym != null && sym instanceof ClassSymbol) {
+				symType = (ClassSymbol)sym;
+			} else {
+				symType = UnknownType.getInstance();
+			}
+			System.out.println("ClassCreator "+sym+" type "+symType);
+			String rand = "_n"+nextreg();
+			currDest.block.code.add(indent).add(typeName(rand,symType)).add("=(*(",sym.getName(),"_class._data._create))(NULL);\n");			
+			currDest.block.code.add(indent).add("(*(",rand,"->_class->_data._init))(",rand);
+			MJParser.ExpressionListContext argList = ctx.classCreatorRest().arguments().expressionList();
+			if (argList != null) {
+				for (MJParser.ExpressionContext arg : argList.expression()) {
+					currDest.block.code.add(",").add(arg.ref);
+				}
+			}
+			currDest.block.code.add(");\n");
+			ctx.ref = new OutputAtom(rand);
+			ctx.tipe = symType;
+		}
         if (traceVisit) traceOut("visitClassCreator");
         return null;
     }

@@ -13,26 +13,27 @@ import ca.nevdull.mjc.compiler.MJParser.CompilationUnitContext;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.List;
 import java.util.ListIterator;
 import java.util.regex.Pattern;
-
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
 
 public class Compiler {
 
 	public static final String PATH_SEPARATOR = ":"; // or File.pathSeparator
+
 	public static final String BOOT_CLASS_PATH_OPTION = "-B";
-	public static final String[] defaultBootClassPath = {"src/ca/nevdull/mjc/lib"};
+	public static final String[] defaultBootClassPath = {"/Users/andy/Software/git/mjc/mjc/src/ca/nevdull/mjc/lib"};
 	String[] bootClassPath = defaultBootClassPath;
+	
 	public static final String CLASS_PATH_OPTION = "-L";
 	public static final String[] defaultClassPath = {""/*i.e. current directory*/};
 	String[] classPath = defaultClassPath;
+
+	public static final String OUTPUT_DIRECTORY_OPTION = "-L";
+	public static final String defaultOutputDirectory = null/*i.e. from input file*/; 
+	String outputDirectory = defaultOutputDirectory;
+
 	public static final String TRACE_OPTION = "-t";
 	HashSet<String> trace = new HashSet<String>();
 
@@ -67,6 +68,8 @@ public class Compiler {
 			bootClassPath = pathSplit(argIter.next());
 		} else if (arg.equals(CLASS_PATH_OPTION) && argIter.hasNext()) {
 			classPath = pathSplit(argIter.next());
+		} else if (arg.equals(OUTPUT_DIRECTORY_OPTION) && argIter.hasNext()) {
+			outputDirectory = argIter.next();
 		} else if (arg.equals(TRACE_OPTION) && argIter.hasNext()) {
 			trace.add(argIter.next());
 		} else {
@@ -76,17 +79,19 @@ public class Compiler {
 
 	private static void errprintf(String format, Object... args) {
 		//TODO if (errorCount >= ERROR_LIMIT) throw new Exception("too many errors");
+		System.err.print("\033[1;31m");
 		System.err.printf(format, args);
+		System.err.print("\033[0m");
         System.err.flush();
         errorCount  += 1;
 	}
 	
     public static void error(Token t, String text, String caller) {
-        errprintf("line %d@%d at %s: %s - %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(), text, caller);
+        errprintf("Line %d@%d at %s: %s - %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(), text, caller);
     }
 
 	public static void error(Token t, String text) {
-        errprintf("line %d@%d at %s: %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(), text);
+        errprintf("Line %d@%d at %s: %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(), text);
     }
 
     public static void error(TerminalNode tn, String text, String caller) {
@@ -102,7 +107,7 @@ public class Compiler {
     }
 
 	public static void note(Token t, String text) {
-        System.err.printf("line %d@%d at %s: %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(),
+        System.err.printf("Line %d@%d at %s: %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(),
         		text);
         System.err.flush();
 	}
@@ -161,6 +166,7 @@ public class Compiler {
 		ANTLRInputStream input;
 		errorCount = 0;
 		try {
+
 			String unitName, codePath = ".";;
 			if (arg == null) {
 				input = new ANTLRInputStream(System.in);
@@ -195,17 +201,16 @@ public class Compiler {
 	        PassData passData = new PassData();
 	        passData.options = this;
 	        passData.parser = parser;
-	        passData.inputDir = codePath;
+	        passData.outputDir = (outputDirectory != null) ?  outputDirectory : codePath;
 	        DefinitionPass def = new DefinitionPass(passData);
 	        walker.walk(def, tree);
 	        System.out.println(DIVIDER);
 	        ReferencePass ref = new ReferencePass(passData);
 	        walker.walk(ref, tree);
 	        System.out.println(DIVIDER);
-//	        GeneratePass gen = new GeneratePass(passData);
-//	        walker.walk(gen, tree);
 	        CodeVisitor cv = new CodeVisitor(passData);
 	        cv.visitCompilationUnit((CompilationUnitContext) tree);
+	        
 		} catch (IOException excp) {
 			error(excp.getMessage());
 		}

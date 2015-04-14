@@ -17,6 +17,6 @@ public class Object extends _NULL_ {
   protected void finalize() /*throws Throwable*/ {
   }
 
-  public /*final*/ Class getClass() native;
+  public final Class getClass() native;
   
 }

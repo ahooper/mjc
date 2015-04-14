@@ -32,7 +32,6 @@ grammar MJ;
 */
 
 @header {
-import ca.nevdull.mjc.compiler.util.OutputItem;	
 }
 
 compilationUnit
@@ -113,7 +112,7 @@ variableDeclaratorId
     :   Identifier arrayDimension
     ;
 
-variableInitializer									locals [ OutputItem ref ]
+variableInitializer									locals [ Type tipe, OutputItem ref ]
     :   arrayInitializer							# arrayVariableInitializer
     |   expression									# simpleVariableInitializer
     ;
@@ -206,7 +205,7 @@ statement
     	(ELSE statement)?							# ifStatement
     |   WHILE parExpression statement				# whileStatement
     |   RETURN expression? ';'						# returnStatement
-    |   ';'											# emnptyStatement
+    |   ';'											# emptyStatement
     |   statementExpression ';'						# expressionStatement
     |   Identifier ':' statement					# labelStatement
     ;
@@ -260,7 +259,7 @@ primary												locals [ Scope refScope, Symbol defn, Type tipe, OutputItem r
     |   Identifier									# identifierPrimary
     ;
 
-creator												locals [ Type tipe ]
+creator												locals [ Type tipe, OutputItem ref ]
     :   createdName arrayCreatorRest				# arrayCreator
     |	createdName classCreatorRest				# classCreator
     ;

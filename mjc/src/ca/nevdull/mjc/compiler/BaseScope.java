@@ -11,11 +11,7 @@ package ca.nevdull.mjc.compiler;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public abstract class BaseScope implements Scope, java.io.Serializable {
-    /**
-	 * 
-	 */
-	private static final long serialVersionUID = -1743235904741909188L;
+public abstract class BaseScope implements Scope {
 	
 	Scope enclosingScope; // null if global (outermost) scope
     Map<String, Symbol> symbols = new LinkedHashMap<String, Symbol>();

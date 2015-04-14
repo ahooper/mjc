@@ -1,10 +1,11 @@
 package ca.nevdull.mjc.compiler;
 
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.antlr.v4.runtime.Token;
@@ -17,7 +18,9 @@ public class DefinitionPass extends MJBaseListener {
     static String preloadClasses[] = {
     			"Object",
     			"Class",
-    			"String"
+    			"String",
+    			"Integer",
+    			"System",
     			};
     
     DefinitionPass(PassData passData) {
@@ -80,28 +83,35 @@ public class DefinitionPass extends MJBaseListener {
     		qname.append(nameComponent);
     	}
     	qname.append(Compiler.IMPORT_SUFFIX);
+    	String qnameString = qname.toString();
+    	boolean found = false;
         try {
-        	boolean found = false;
         	for (String pathDir : classPath) {
             	File fname;
-        		if (pathDir == null || pathDir.length() == 0) {
-        			if (passData.inputDir == null) fname = new File(qname.toString());
-        			else fname = new File(passData.inputDir,qname.toString());
-        		} else fname = new File(pathDir+File.separator+qname.toString());
+				if (pathDir == null || pathDir.length() == 0) {
+        			if (passData.outputDir == null) fname = new File(qnameString);
+        			else fname = new File(passData.outputDir,qnameString);
+        		} else fname = new File(pathDir+File.separator+qnameString);
             	if (! fname.isFile() ) continue; // try next in path
                 found = true;
+                System.out.println("import found "+fname.getAbsolutePath());
             	FileInputStream fis = new FileInputStream(fname);
-                ObjectInputStream ois = new ObjectInputStream(fis);
-                ClassSymbol importClass = (ClassSymbol) ois.readObject();
+                DataInputStream dis = new DataInputStream(fis);
+                ClassSymbol importClass = new ClassSymbol();
+                importClass.readImport(dis);
                 System.out.println("import "+qname+" "+importClass);
-                ois.close();
+                dis.close();
                 passData.globals.define(importClass);
                 break;
         	}
-			if (!found) Compiler.error("Not found "+qname+" (path "+classPath+")");        	
-		} catch (IOException | ClassNotFoundException excp) {
-			Compiler.error("Unable to read symbols "+excp.getMessage());
+			if (!found) Compiler.error("Not found "+qname+" (path "+Arrays.toString(classPath)+")");        	
+		} catch (IOException | ClassNotFoundException | InstantiationException | IllegalAccessException excp) {
+			Compiler.error("Unable to read symbols "+excp.toString());
+			excp.printStackTrace();
 		}
+		if (!found) {
+			//TODO install an unknown class to soak up member errors
+		};        	
 	}
     
     @Override public void exitQualifiedName(MJParser.QualifiedNameContext ctx) { }
@@ -109,25 +119,35 @@ public class DefinitionPass extends MJBaseListener {
     @Override
 	public void exitTypeDeclaration(@NotNull MJParser.TypeDeclarationContext ctx) {
     	Access access = Access.AccessDefault;
-		for (MJParser.ClassOrInterfaceModifierContext m : ctx.classOrInterfaceModifier()) {
-			Access a = Access.AccessDefault;
-			if (m.PUBLIC() != null) a = Access.AccessPublic;
-			else if (m.PROTECTED() != null) a = Access.AccessProtected;
-			else if (m.PRIVATE() != null) a = Access.AccessPrivate;
-			if (a != Access.AccessDefault) {
-				if (access == Access.AccessDefault) {
-					access = a;
-				} else {
-					Compiler.error(m.getStart(),"conflicts with previous modifier "+access,"TypeDeclaration");
-				}
-			} else assert false : "unrecognized classOrInterfaceModifier";
-		}
 		MJParser.ClassDeclarationContext cdecl = ctx.classDeclaration();
 		//LATER could be interfaceDeclaration
 		if (cdecl != null) {
+			for (MJParser.ClassOrInterfaceModifierContext m : ctx.classOrInterfaceModifier()) {
+				access = applyAccessModifier(access, m,"TypeDeclaration");
+	    		if (m.STATIC() != null) cdecl.defn.isStatic = true;
+	    		if (m.ABSTRACT() != null) cdecl.defn.isAbstract = true;
+	    		if (m.FINAL() != null) cdecl.defn.isFinal = true;
+	    		// not fussing if static, abstract, or final modifiers are repeated
+			}
 			System.out.println("exitTypeDeclaration class access "+access);
 			cdecl.defn.setAccess(access);
 		}
+	}
+
+	private Access applyAccessModifier(Access access,
+			MJParser.ClassOrInterfaceModifierContext m, String where) {
+		Access a = Access.AccessDefault;
+		if (m.PUBLIC() != null) a = Access.AccessPublic;
+		else if (m.PROTECTED() != null) a = Access.AccessProtected;
+		else if (m.PRIVATE() != null) a = Access.AccessPrivate;
+		if (a != Access.AccessDefault) {
+			if (access == Access.AccessDefault) {
+				access = a;
+			} else {
+				Compiler.error(m.getStart(),"conflicts with previous modifier "+access,where);
+			}
+		} else assert false : "unrecognized classOrInterfaceModifier";
+		return access;
 	}
 	@Override public void exitModifier(@NotNull MJParser.ModifierContext ctx) { }
 	@Override public void exitClassOrInterfaceModifier(@NotNull MJParser.ClassOrInterfaceModifierContext ctx) { }
@@ -144,7 +164,57 @@ public class DefinitionPass extends MJBaseListener {
 	public void exitClassDeclaration(@NotNull MJParser.ClassDeclarationContext ctx) {
         leaveScope();
 	}
-
+	
+	@Override
+	public void exitMemberClassBodyDeclaration(@NotNull MJParser.MemberClassBodyDeclarationContext ctx) {
+    	Access access = Access.AccessDefault;
+		MJParser.MemberDeclarationContext member = ctx.memberDeclaration();
+		if (member != null) {
+			for (MJParser.ModifierContext m : ctx.modifier()) {
+				MJParser.ClassOrInterfaceModifierContext cm = m.classOrInterfaceModifier();
+				if (cm != null) {
+					access = applyAccessModifier(access, cm,"MemberClassBodyDeclaration");
+					if (member.methodDeclaration() != null) {
+						MethodSymbol mdefn = member.methodDeclaration().defn;
+			    		if (cm.STATIC() != null) mdefn.isStatic = true;
+			    		if (cm.ABSTRACT() != null) mdefn.isAbstract = true;
+			    		if (cm.FINAL() != null) mdefn.isFinal = true;
+					} else if (member.fieldDeclaration() != null) {
+						for (MJParser.VariableDeclaratorContext vd : member.fieldDeclaration().variableDeclarators().variableDeclarator()) {
+							VariableSymbol vdefn = vd.defn;
+				    		if (cm.STATIC() != null) vdefn.isStatic = true;
+				    		if (cm.ABSTRACT() != null) Compiler.error(cm.start,"abstract cannot be applied to a fieldDeclaration","MemberClassBodyDeclaration");
+				    		if (cm.FINAL() != null) vdefn.isFinal = true;
+						}
+					} else if (member.constructorDeclaration() != null) {
+						MethodSymbol cdefn = member.constructorDeclaration().defn;
+			    		if (cm.STATIC() != null) cdefn.isStatic = true;
+			    		if (cm.ABSTRACT() != null) cdefn.isAbstract = true;
+			    		if (cm.FINAL() != null) cdefn.isFinal = true;
+					} else if (member.classDeclaration() != null) {
+						ClassSymbol cdefn = member.classDeclaration().defn;
+			    		if (cm.STATIC() != null) cdefn.isStatic = true;
+			    		if (cm.ABSTRACT() != null) cdefn.isAbstract = true;
+			    		if (cm.FINAL() != null) cdefn.isFinal = true;
+					} else assert false : "unrecognized memberDeclaration";
+		    		// not fussing if static, abstract, or final modifiers are repeated
+				} /*else LATER - more modifiers*/
+			}
+			System.out.println("exitMemberClassBodyDeclaration class access "+access);
+			if (member.methodDeclaration() != null) {
+				member.methodDeclaration().defn.setAccess(access);
+			} else if (member.fieldDeclaration() != null) {
+				for (MJParser.VariableDeclaratorContext vd : member.fieldDeclaration().variableDeclarators().variableDeclarator()) {
+					vd.defn.setAccess(access);
+				}
+			} else if (member.constructorDeclaration() != null) {
+				member.constructorDeclaration().defn.setAccess(access);
+			} else if (member.classDeclaration() != null) {
+				member.classDeclaration().defn.setAccess(access);
+			} else assert false : "unrecognized memberDeclaration";
+		}
+	}
+	
 	@Override
 	public void enterConstructorDeclaration(MJParser.ConstructorDeclarationContext ctx) {
     	Token token = ctx.Identifier().getSymbol();

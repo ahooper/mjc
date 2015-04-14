@@ -1,8 +1,10 @@
 package ca.nevdull.mjc.compiler;
 
-public class VoidType extends Symbol implements Type {
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 
-	private static final long serialVersionUID = -3467921449807277019L;
+public class VoidType extends Symbol implements Type {
 
 	// void is not really a type, but we pretend
 	private static final VoidType INSTANCE = new VoidType();
@@ -17,5 +19,15 @@ public class VoidType extends Symbol implements Type {
 
     public String toString() {
     	return "void";
+    }
+
+    public void writeImportTypeContent(DataOutput out)
+            throws IOException {
+    }
+
+    public Type readImportTypeContent(DataInput in)
+            throws IOException {
+    	// only one instance
+    	return getInstance();  // discards current instance
     }
 }

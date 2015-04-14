@@ -1,1 +1,2 @@
+#!/bin/sh
 java -classpath $HOME/Software/git/mjc/mjc/bin:$HOME/Software/java/@Distribution/antlr-4.4-complete.jar ca.nevdull.mjc.compiler.Compiler $*

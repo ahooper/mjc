@@ -190,7 +190,7 @@ public class ReferencePass extends MJBaseListener {
 
 	@Override public void exitWhileStatement(MJParser.WhileStatementContext ctx) { }
 	@Override public void exitExpressionStatement(MJParser.ExpressionStatementContext ctx) { }
-	@Override public void exitEmnptyStatement(MJParser.EmnptyStatementContext ctx) { }
+	@Override public void exitEmptyStatement(MJParser.EmptyStatementContext ctx) { }
 	@Override public void exitReturnStatement(MJParser.ReturnStatementContext ctx) { }
 	@Override public void exitLabelStatement(MJParser.LabelStatementContext ctx) { }
 	@Override public void exitBlkStatement(MJParser.BlkStatementContext ctx) { }
@@ -274,7 +274,7 @@ public class ReferencePass extends MJBaseListener {
 			}
 			if (sym instanceof ClassSymbol) {
 	    		ctx.defn = sym;
-			} else {
+			} else if (sym != null) {
 	        	Compiler.error(sym.getToken(), sym.getName()+" is not a class","CreatedName");
 			}
 		}

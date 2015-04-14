@@ -1,4 +1,4 @@
-package ca.nevdull.mjc.compiler.util;
+package ca.nevdull.mjc.compiler;
 
 import java.io.PrintStream;
 import java.util.ArrayList;
