@@ -193,7 +193,7 @@ public class Compiler {
 	        parser.removeErrorListeners(); // remove ConsoleErrorListener
 	        parser.addErrorListener(new UnderlineErrorListener());
 	        parser.setBuildParseTree(true);
-	        ParseTree tree = parser.compilationUnit();
+	        MJParser.CompilationUnitContext unit = parser.compilationUnit();
 	        // show tree in text form
 	        //System.out.println(tree.toStringTree(parser));
 	
@@ -203,13 +203,13 @@ public class Compiler {
 	        passData.parser = parser;
 	        passData.outputDir = (outputDirectory != null) ?  outputDirectory : codePath;
 	        DefinitionPass def = new DefinitionPass(passData);
-	        walker.walk(def, tree);
+	        walker.walk(def, unit);
 	        System.out.println(DIVIDER);
 	        ReferencePass ref = new ReferencePass(passData);
-	        walker.walk(ref, tree);
+	        walker.walk(ref, unit);
 	        System.out.println(DIVIDER);
 	        CodeVisitor cv = new CodeVisitor(passData);
-	        cv.visitCompilationUnit((CompilationUnitContext) tree);
+	        cv.visitCompilationUnit((CompilationUnitContext) unit);
 	        
 		} catch (IOException excp) {
 			error(excp.getMessage());

@@ -1,8 +1,6 @@
 package ca.nevdull.mjc.compiler;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.PrintWriter;
 
 public class VoidType extends Symbol implements Type {
 
@@ -21,13 +19,7 @@ public class VoidType extends Symbol implements Type {
     	return "void";
     }
 
-    public void writeImportTypeContent(DataOutput out)
-            throws IOException {
-    }
-
-    public Type readImportTypeContent(DataInput in)
-            throws IOException {
-    	// only one instance
-    	return getInstance();  // discards current instance
-    }
+	public void writeImportType(PrintWriter pw) {
+		pw.append(name);
+	}
 }

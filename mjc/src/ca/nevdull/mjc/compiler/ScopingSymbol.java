@@ -9,8 +9,6 @@ package ca.nevdull.mjc.compiler;
  * Visit http://www.pragmaticprogrammer.com/titles/tpdsl for more book information.
 ***/
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.util.Map;
 
 import org.antlr.v4.runtime.Token;
@@ -27,9 +25,6 @@ public abstract class ScopingSymbol extends Symbol implements Scope {
 	public ScopingSymbol(String nameString, Scope enclosingScope) {
 		super(nameString, enclosingScope);
 		this.enclosingScope = enclosingScope;
-	}
-
-	public ScopingSymbol() {
 	}
 
 	public String getScopeName() {

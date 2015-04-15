@@ -1,16 +1,21 @@
 package ca.nevdull.mjc.compiler;
 
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import org.antlr.v4.runtime.ANTLRInputStream;
+import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.misc.NotNull;
+import org.antlr.v4.runtime.tree.ParseTreeWalker;
 import org.antlr.v4.runtime.tree.TerminalNode;
+
+import ca.nevdull.mjc.compiler.Compiler.UnderlineErrorListener;
 
 public class DefinitionPass extends MJBaseListener {
 	PassData passData;
@@ -26,6 +31,17 @@ public class DefinitionPass extends MJBaseListener {
     DefinitionPass(PassData passData) {
     	super();
     	this.passData = passData;
+        passData.globals = new GlobalScope();
+        enterScope(passData.globals);
+		//XXX ClassSymbol nullClass = new ClassSymbol("_NULL_", passData.globals, null);
+		//XXX passData.globals.define(nullClass);
+    	String[] bootclasspath = passData.options.bootClassPath;
+    	List<String> nameComponents = new ArrayList<String>();
+    	for (String className : preloadClasses) {
+    		nameComponents.clear();
+    		nameComponents.add(className);
+    		importClass(nameComponents, bootclasspath);
+    	}
     }
     
     private void enterScope(Scope newScope) {
@@ -45,19 +61,7 @@ public class DefinitionPass extends MJBaseListener {
 
     @Override
     public void enterCompilationUnit(@NotNull MJParser.CompilationUnitContext ctx) {
-        passData.globals = new GlobalScope();
-        //TODO define globals - Object, Class, String
-		ClassSymbol nullClass = new ClassSymbol("_NULL_", passData.globals, null);
-		passData.globals.define(nullClass);
-    	String[] bootclasspath = passData.options.bootClassPath;
-    	List<String> nameComponents = new ArrayList<String>();
-    	for (String className : preloadClasses) {
-    		nameComponents.clear();
-    		nameComponents.add(className);
-    		importClass(nameComponents, bootclasspath);
-    	}
-        enterScope(passData.globals);
-     }
+    }
 
     @Override
     public void exitCompilationUnit(@NotNull MJParser.CompilationUnitContext ctx) {
@@ -82,31 +86,28 @@ public class DefinitionPass extends MJBaseListener {
     		if (qname.length() > 0) qname.append(File.separatorChar);
     		qname.append(nameComponent);
     	}
-    	qname.append(Compiler.IMPORT_SUFFIX);
     	String qnameString = qname.toString();
+    	if (passData.globals.resolve(qnameString) != null) {
+    		System.out.println("previously imported "+qnameString);
+    		return;
+    	}
     	boolean found = false;
         try {
         	for (String pathDir : classPath) {
             	File fname;
 				if (pathDir == null || pathDir.length() == 0) {
-        			if (passData.outputDir == null) fname = new File(qnameString);
-        			else fname = new File(passData.outputDir,qnameString);
-        		} else fname = new File(pathDir+File.separator+qnameString);
+        			if (passData.outputDir == null) fname = new File(qnameString+Compiler.IMPORT_SUFFIX);
+        			else fname = new File(passData.outputDir,qnameString+Compiler.IMPORT_SUFFIX);
+        		} else fname = new File(pathDir,qnameString+Compiler.IMPORT_SUFFIX);
             	if (! fname.isFile() ) continue; // try next in path
                 found = true;
                 System.out.println("import found "+fname.getAbsolutePath());
-            	FileInputStream fis = new FileInputStream(fname);
-                DataInputStream dis = new DataInputStream(fis);
-                ClassSymbol importClass = new ClassSymbol();
-                importClass.readImport(dis);
-                System.out.println("import "+qname+" "+importClass);
-                dis.close();
-                passData.globals.define(importClass);
+                ClassSymbol importClass = compileImport(fname);
                 break;
         	}
 			if (!found) Compiler.error("Not found "+qname+" (path "+Arrays.toString(classPath)+")");        	
-		} catch (IOException | ClassNotFoundException | InstantiationException | IllegalAccessException excp) {
-			Compiler.error("Unable to read symbols "+excp.toString());
+		} catch (IOException excp) {
+			Compiler.error("Unable to read import "+excp.toString());
 			excp.printStackTrace();
 		}
 		if (!found) {
@@ -114,11 +115,32 @@ public class DefinitionPass extends MJBaseListener {
 		};        	
 	}
     
+	private ClassSymbol compileImport(File inFile) throws FileNotFoundException, IOException {
+		ANTLRInputStream input = new ANTLRInputStream(new FileInputStream(inFile));
+        MJLexer lexer = new MJLexer(input);
+        CommonTokenStream tokens = new CommonTokenStream(lexer);
+        MJParser parser = new MJParser(tokens);
+        parser.removeErrorListeners(); // remove ConsoleErrorListener
+        parser.addErrorListener(new UnderlineErrorListener());
+        parser.setBuildParseTree(true);
+        MJParser.CompilationUnitContext unit = parser.compilationUnit();
+        ParseTreeWalker walker = new ParseTreeWalker();
+        /*
+        PassData impData = new PassData();
+        impData.options = this.passData.options;
+        impData.parser = parser;
+        impData.outputDir = null;
+        DefinitionPass def = new DefinitionPass(impData);
+        */
+        walker.walk(this, unit);
+        return unit.typeDeclaration(0).classDeclaration().defn;
+	}
+	
     @Override public void exitQualifiedName(MJParser.QualifiedNameContext ctx) { }
     
     @Override
 	public void exitTypeDeclaration(@NotNull MJParser.TypeDeclarationContext ctx) {
-    	Access access = Access.AccessDefault;
+    	Access access = Access.DEFAULT;
 		MJParser.ClassDeclarationContext cdecl = ctx.classDeclaration();
 		//LATER could be interfaceDeclaration
 		if (cdecl != null) {
@@ -136,12 +158,12 @@ public class DefinitionPass extends MJBaseListener {
 
 	private Access applyAccessModifier(Access access,
 			MJParser.ClassOrInterfaceModifierContext m, String where) {
-		Access a = Access.AccessDefault;
-		if (m.PUBLIC() != null) a = Access.AccessPublic;
-		else if (m.PROTECTED() != null) a = Access.AccessProtected;
-		else if (m.PRIVATE() != null) a = Access.AccessPrivate;
-		if (a != Access.AccessDefault) {
-			if (access == Access.AccessDefault) {
+		Access a = Access.DEFAULT;
+		if (m.PUBLIC() != null) a = Access.PUBLIC;
+		else if (m.PROTECTED() != null) a = Access.PROTECTED;
+		else if (m.PRIVATE() != null) a = Access.PRIVATE;
+		if (a != Access.DEFAULT) {
+			if (access == Access.DEFAULT) {
 				access = a;
 			} else {
 				Compiler.error(m.getStart(),"conflicts with previous modifier "+access,where);
@@ -167,7 +189,7 @@ public class DefinitionPass extends MJBaseListener {
 	
 	@Override
 	public void exitMemberClassBodyDeclaration(@NotNull MJParser.MemberClassBodyDeclarationContext ctx) {
-    	Access access = Access.AccessDefault;
+    	Access access = Access.DEFAULT;
 		MJParser.MemberDeclarationContext member = ctx.memberDeclaration();
 		if (member != null) {
 			for (MJParser.ModifierContext m : ctx.modifier()) {

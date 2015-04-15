@@ -1,15 +1,13 @@
 package ca.nevdull.mjc.compiler;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.PrintWriter;
 
 public class UnknownType extends Symbol implements Type {
 	
 	private static final UnknownType INSTANCE = new UnknownType();
 	 
     private UnknownType() {
-    	super("unknown", null);
+    	super("Unknown", null);
     }
  
     public static UnknownType getInstance() {
@@ -17,16 +15,10 @@ public class UnknownType extends Symbol implements Type {
     }
     
 	public String toString() {
-		return "unknown";
+		return "Unknown";
 	}
 
-    public void writeImportTypeContent(DataOutput out)
-            throws IOException {
-    }
-
-    public Type readImportTypeContent(DataInput in)
-            throws IOException {
-    	// only one instance
-		return getInstance();  // discards current instance
-    }
+	public void writeImportType(PrintWriter pw) {
+		pw.append(name);
+	}
 }

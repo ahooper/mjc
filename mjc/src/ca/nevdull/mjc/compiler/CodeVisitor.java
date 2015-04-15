@@ -1,16 +1,16 @@
 package ca.nevdull.mjc.compiler;
 
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.ObjectOutputStream;
 import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
@@ -304,7 +304,7 @@ public class CodeVisitor {
 		if (sup != null) {
 	    	superName = sup.getName();
 		}
-		if (classSymbol.access == null) classSymbol.setAccess(Access.AccessDefault);
+		if (classSymbol.access == null) classSymbol.setAccess(Access.DEFAULT);
 		currDest = new ClassDest(ctx.defn, currDest);
 		
 		currDest.classStructure.add("#ifndef ",className,"_DEFN\n")
@@ -343,9 +343,14 @@ public class CodeVisitor {
 		// Save symbols for import
         try {
 			FileOutputStream fos = new FileOutputStream(currDest.makeFilePath(Compiler.IMPORT_SUFFIX));
-	        DataOutputStream dos = new DataOutputStream(fos);
-	        classSymbol.writeImport(dos);
-	        dos.close();
+	        PrintWriter pw = new PrintWriter(fos);
+			for (Entry<String, Symbol> globEnt : passData.globals.symbols.entrySet()) {
+				Symbol globSym = globEnt.getValue();
+				if (globSym == classSymbol) continue;
+				pw.append("import ").append(globSym.getName()).append(";\n");
+			}
+	        classSymbol.writeImport(pw);
+	        pw.close();
 		} catch (IOException excp) {
 			Compiler.error("Unable to write symbols "+excp.getMessage());
 		}
@@ -1317,7 +1322,7 @@ public class CodeVisitor {
 			System.out.println("ClassCreator "+sym+" type "+symType);
 			String rand = "_n"+nextreg();
 			currDest.block.code.add(indent).add(typeName(rand,symType)).add("=(*(",sym.getName(),"_class._data._create))(NULL);\n");			
-			currDest.block.code.add(indent).add("(*(",rand,"->_class->_data._init))(",rand);
+			currDest.block.code.add(indent).add("(*(checkPtr(",rand,")->_class->_data._init))(",rand);
 			MJParser.ExpressionListContext argList = ctx.classCreatorRest().arguments().expressionList();
 			if (argList != null) {
 				for (MJParser.ExpressionContext arg : argList.expression()) {

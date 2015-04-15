@@ -1,8 +1,6 @@
 package ca.nevdull.mjc.compiler;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.PrintWriter;
 
 public class ArrayType extends Symbol implements Type {
 	
@@ -40,16 +38,8 @@ public class ArrayType extends Symbol implements Type {
 		return elementType.toString()+"[]";
 	}
 
-    public void writeImportTypeContent(DataOutput out)
-            throws IOException {
-    	out.writeUTF(elementType.getClass().getSimpleName());
-    	elementType.writeImportTypeContent(out);
-    }
-
-    public Type readImportTypeContent(DataInput in)
-            throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException {
-		elementType = Symbol.readImportType(in);
-		return this;
-    }
-
+	public void writeImportType(PrintWriter pw) {
+		elementType.writeImportType(pw);
+		pw.append("[]");
+	}
 }
