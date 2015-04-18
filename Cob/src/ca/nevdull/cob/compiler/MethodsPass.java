@@ -1,23 +1,23 @@
 package ca.nevdull.cob.compiler;
 
-import org.antlr.v4.runtime.Parser;
+import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 public class MethodsPass extends PassCommon {
 	
-	public MethodsPass(Main main, Parser parser, String outoutDir) {
-		super(main, parser, outoutDir);
+	public MethodsPass(PassData data) {
+		super(data);
 	}
 
 	@Override public Void visitKlass(CobParser.KlassContext ctx) {
 		String name = ctx.name.getText();
-		String parent = ctx.parent.getText();
-		out("struct ",name,"_Methods {\n");
-		if (!parent.equals(PassCommon.NULL_PARENT)) out("    struct ",parent,"_Methods parent;\n");
+		writeDefn("struct ",name,"_Methods {\n");
+		Token parent = ctx.parent;
+		if (parent != null) writeDefn("    struct ",parent.getText(),"_Methods parent;\n");
 		for (CobParser.MemberContext decl : ctx.member()) {
 			visit(decl);
 		}
-		out("};\n");
+		writeDefn("};\n");
 		return null;
 	}
 	
@@ -31,16 +31,16 @@ public class MethodsPass extends PassCommon {
 		String array = "";
 		if (type.getChildCount() > 1) array = "[]";
 		TerminalNode id = ctx.ID();
-		out("    ",typeName," (*",id.getText(),")",array,"(",className," this");
+		writeDefn("    ",typeName," (*",id.getText(),")",array,"(",className," this");
 		CobParser.ArgumentsContext arguments = ctx.arguments();
 		if (arguments != null) {
 			String sep = ",";
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
-				out(sep);  sep = ",";
+				writeDefn(sep);  sep = ",";
 				visit(argument);
 			}
 		}
-		out(");\n");
+		writeDefn(");\n");
 		return null;
 	}
 	
@@ -49,7 +49,7 @@ public class MethodsPass extends PassCommon {
 		String typeName = type.typeName().getText();
 		String array = "";
 		if (type.getChildCount() > 1) array = "[]";
-		out(typeName," ",ctx.ID().getText(),array);
+		writeDefn(typeName," ",ctx.ID().getText(),array);
 		return null;
 	}
 	

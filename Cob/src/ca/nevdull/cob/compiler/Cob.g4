@@ -4,12 +4,12 @@ file
 	:	klass EOF
 	;
 
-klass
-	:	'class' name=ID ':' parent=ID '{' member* '}'
+klass																	locals [ ClassSymbol defn ]
+	:	'class' name=ID ':' ( parent=ID | 'null' ) '{' member* '}'
 	;
 
-member
-	:	'static'? type ID '(' arguments? ')' compoundStatement				# method
+member																	locals [ Symbol defn ]
+	:	'static'? type ID '(' arguments? ')' compoundStatement			# method
 	|	'static'? type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'	# field
 	;
 
@@ -17,15 +17,15 @@ arguments
 	:	argument ( ',' argument )* ( ',' '...' )?
 	;
 	
-argument
+argument																locals [ Symbol defn ]
 	:	type ID
 	;
 	
-type
+type																	locals [ Type tipe ]	
 	: 	typeName ( '[' ']' )?
 	;
 	
-typeName
+typeName																locals [ Scope refScope, Type tipe ]
 	:	'boolean'
 	|	'byte'
 	|	'char'
@@ -38,11 +38,12 @@ typeName
 	|	ID
 	;
 
-primary
+primary																	locals [ Scope refScope, Type tipe ]
     :   ID																# namePrimary
     |	'this'															# thisPrimary
     |   Number															# numberPrimary
     |   String+															# stringPrimary
+    |	'null'															# nullPrimary
     |   '(' sequence ')'												# parenPrimary
     |   primary '[' sequence ']'										# indexPrimary
     |   primary '(' expressionList? ')'									# callPrimary
@@ -56,19 +57,19 @@ expressionList
     :   assignment ( ',' assignment )?
     ;
 
-unary
+unary																	locals [ Type tipe ]
     :   primary															# primaryUnary
     |   '++' unary														# incrementUnary
     |   '--' unary														# decrementUnary
     |   ( '&' | '*' | '+' | '-' | '~' | '!' ) cast						# operatorUnary
     ;
 
-cast
+cast																	locals [ Type tipe ]
     :   unary															# unaryCast
     |   '(' typeName ')' cast											# typeCast
     ;
 
-expression
+expression																locals [ Type tipe ]
     :   cast															# castExpression
     |   expression ( '*' | '/' | '%' ) expression						# multiplyExpression
     |   expression ( '+' | '-')  expression								# addExpression
@@ -83,16 +84,16 @@ expression
     |   expression '?' expression ':' expression						# conditionalExpression
     ;
 
-assignment
+assignment																locals [ Type tipe ]
     :   expression
     |   unary ( '=' | '*=' | '/=' | '%=' | '+=' | '-=' | '<<=' | '>>=' | '&=' | '^=' | '|=' ) assignment
     ;
 
-sequence
+sequence																locals [ Type tipe ]
     :   assignment ( ',' assignment )*
     ;
 
-constantExpression
+constantExpression														locals [ Type tipe ]
     :   expression
     ;
 
@@ -105,7 +106,7 @@ blockItem
     |   statement
     ;
 
-declaration
+declaration																	locals [ Symbol defn ]
 	:	type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'	
 	;
 
@@ -132,7 +133,7 @@ switchItem
 Reserved
 	:	'break' | 'case' | 'char' | 'const' | 'continue' | 'default' | 'do' | 'double' | 'else' | 'enum' | 'extern'
 	|	'float' | 'for' | 'if' | 'int' | 'long' | 'return' | 'short' | 'signed' | 'sizeof' | 'static' | 'struct'
-	|	'switch' | 'this' | 'typedef' | 'unsigned' | 'void' | 'while' | 'boolean' | 'byte' | 'class'
+	|	'switch' | 'this' | 'typedef' | 'unsigned' | 'void' | 'while' | 'boolean' | 'byte' | 'class' | 'null'
 	;
 
 LeftParen : '(';

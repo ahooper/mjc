@@ -1,30 +1,37 @@
 package ca.nevdull.cob.compiler;
 
-import org.antlr.v4.runtime.Parser;
+import java.io.FileNotFoundException;
+
+import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 public class ObjectPass extends PassCommon {
 
-	public ObjectPass(Main main, Parser parser, String outoutDir) {
-		super(main, parser, outoutDir);
+	public ObjectPass(PassData data) {
+		super(data);
 	}
 
 	@Override public Void visitKlass(CobParser.KlassContext ctx) {
 		String name = ctx.name.getText();
-		out("#ifndef ",name,"_DEFN\n");
-		out("#define ",name,"_DEFN\n");
-		out("#include \"cob.h\"\n");
-		String parent = ctx.parent.getText();
-		if (!parent.equals(PassCommon.NULL_PARENT)) out("#include \"",parent,".h\"\n");
-		out("typedef struct ",name,"_Object *",name,";\n");
-		out("extern struct ClassTable ",name,"_Class;\n");
-		out("struct ",name,"_Object {\n");
-		if (!parent.equals(PassCommon.NULL_PARENT)) out("    struct ",parent,"_Object parent;\n");
+		try {
+			passData.defnStream = passData.openFileStream(name, ".h");
+		} catch (FileNotFoundException excp) {
+			Main.error("Unable to open defintions stream "+excp.getMessage());
+		}
+		writeDefn("#ifndef ",name,"_DEFN\n");
+		writeDefn("#define ",name,"_DEFN\n");
+		writeDefn("#include \"cob.h\"\n");
+		Token parent = ctx.parent;
+		if (parent != null) writeDefn("#include \"",parent.getText(),".h\"\n");
+		writeDefn("typedef struct ",name,"_Object *",name,";\n");
+		writeDefn("extern struct ClassTable ",name,"_Class;\n");
+		writeDefn("struct ",name,"_Object {\n");
+		if (parent != null) writeDefn("    struct ",parent.getText(),"_Object parent;\n");
 		for (CobParser.MemberContext decl : ctx.member()) {
 			visit(decl);
 		}
-		out("};\n");
-		out("#endif /*",name,"_DEFN*/\n");
+		writeDefn("};\n");
+		writeDefn("#endif /*",name,"_DEFN*/\n");
 		return null;
 	}
 	
@@ -35,7 +42,7 @@ public class ObjectPass extends PassCommon {
 		String array = "";
 		if (type.getChildCount() > 1) array = "[]";
 		for (TerminalNode id : ctx.ID()) {
-			out("    ",typeName," ",id.getText(),array,";\n");
+			writeDefn("    ",typeName," ",id.getText(),array,";\n");
 		}
 		return null;
 	}

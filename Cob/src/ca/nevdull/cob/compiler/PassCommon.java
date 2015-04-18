@@ -1,22 +1,15 @@
 package ca.nevdull.cob.compiler;
 
-import org.antlr.v4.runtime.Parser;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
 
 public class PassCommon extends CobBaseVisitor<Void> {
 
-	protected Main main;
-	protected Parser parser;
-	protected String outoutDir;
-	
-	protected static final String NULL_PARENT = "null";
+	protected PassData passData;
 
-	public PassCommon(Main main, Parser parser, String outoutDir) {
+	public PassCommon(PassData data) {
 		super();
-		this.main = main;
-		this.parser = parser;
-		this.outoutDir = outoutDir;
+		this.passData = data;
 	}
 
 	public void printContextTree(ParseTree t, String indent) {
@@ -36,9 +29,15 @@ public class PassCommon extends CobBaseVisitor<Void> {
 		}
 	}
 
-	protected void out(String... list) {
+	protected void writeDefn(String... list) {
 		for (String s : list) {
-			System.out.print(s);
+			passData.defnStream.print(s);
+		}
+	}
+
+	protected void writeImpl(String... list) {
+		for (String s : list) {
+			passData.implStream.print(s);
 		}
 	}
 

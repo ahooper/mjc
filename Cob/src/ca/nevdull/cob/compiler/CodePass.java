@@ -1,12 +1,13 @@
 package ca.nevdull.cob.compiler;
 
-import org.antlr.v4.runtime.Parser;
+import java.io.FileNotFoundException;
+
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 public class CodePass extends PassCommon {
 	
-	public CodePass(Main main, Parser parser, String outoutDir) {
-		super(main, parser, outoutDir);
+	public CodePass(PassData data) {
+		super(data);
 	}
 
 	@Override public Void visitFile(CobParser.FileContext ctx) {
@@ -16,7 +17,12 @@ public class CodePass extends PassCommon {
 
 	@Override public Void visitKlass(CobParser.KlassContext ctx) {
 		String name = ctx.name.getText();
-		out("#include \"",name,".h\"\n");
+		try {
+			passData.implStream = passData.openFileStream(name, ".c");
+		} catch (FileNotFoundException excp) {
+			Main.error("Unable to open implementations stream "+excp.getMessage());
+		}
+		writeImpl("#include \"",name,".h\"\n");
 		for (CobParser.MemberContext decl : ctx.member()) {
 			visit(decl);
 		}
@@ -32,17 +38,18 @@ public class CodePass extends PassCommon {
 		String array = "";
 		if (type.getChildCount() > 1) array = "[]";
 		TerminalNode id = ctx.ID();
-		out("static ",typeName," ",className,"_",id.getText(),array,"(",className," this");
+		writeImpl("static ",typeName," ",className,"_",id.getText(),array,"(",className," this");
 		CobParser.ArgumentsContext arguments = ctx.arguments();
 		if (arguments != null) {
 			String sep = ",";
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
-				out(sep);  sep = ",";
+				writeImpl(sep);  sep = ",";
 				visit(argument);
 			}
 		}
-		out(")");
+		writeImpl(")");
 		visit(ctx.compoundStatement());
+		writeImpl("\n");
 		return null;
 	}
 	
@@ -56,17 +63,17 @@ public class CodePass extends PassCommon {
 		String typeName = type.typeName().getText();
 		String array = "";
 		if (type.getChildCount() > 1) array = "[]";
-		out(typeName," ",ctx.ID().getText(),array);
+		writeImpl(typeName," ",ctx.ID().getText(),array);
 		return null;
 	}
 
     @Override public Void visitNamePrimary(CobParser.NamePrimaryContext ctx) {
-        out(" ",ctx.ID().getText());
+        writeImpl(" ",ctx.ID().getText());
         return null;
     }
 
     @Override public Void visitThisPrimary(CobParser.ThisPrimaryContext ctx) {
-        out("this");
+        writeImpl("this");
         return null;
     }
 
@@ -76,6 +83,11 @@ public class CodePass extends PassCommon {
     }
 
     @Override public Void visitStringPrimary(CobParser.StringPrimaryContext ctx) {
+        visitChildren(ctx);
+        return null;
+    }
+
+    @Override public Void visitNullPrimary(CobParser.NullPrimaryContext ctx) {
         visitChildren(ctx);
         return null;
     }
@@ -96,22 +108,22 @@ public class CodePass extends PassCommon {
     }
 
     @Override public Void visitInvokePrimary(CobParser.InvokePrimaryContext ctx) {
-    	out("(");
+    	writeImpl("(");
     	visit(ctx.primary());
-    	out(")->",ctx.ID().getText(),"(<obj>");
+    	writeImpl(")->",ctx.ID().getText(),"(<obj>");  //TODO
     	CobParser.ExpressionListContext args = ctx.expressionList();
     	if (args != null) {
     		visit(args);
     	}
-		out(")");
+		writeImpl(")");
         visitChildren(ctx);
         return null;
     }
 
     @Override public Void visitMemberPrimary(CobParser.MemberPrimaryContext ctx) {
-    	out("(");
+    	writeImpl("(");
     	visit(ctx.primary());
-    	out(")->",ctx.ID().getText());
+    	writeImpl(")->",ctx.ID().getText());
         return null;
     }
 
@@ -236,17 +248,17 @@ public class CodePass extends PassCommon {
     }
 
     @Override public Void visitCompoundStatement(CobParser.CompoundStatementContext ctx) {
-    	out("{\n");
+    	writeImpl("{\n");
     	for (CobParser.BlockItemContext item : ctx.blockItem()) {
     		visit(item);
     	}
-        out("}\n");
+        writeImpl("}");
         return null;
     }
 
     @Override public Void visitBlockItem(CobParser.BlockItemContext ctx) {
         visitChildren(ctx);
-        out("\n");
+        writeImpl("\n");
         return null;
     }
 
@@ -266,7 +278,7 @@ public class CodePass extends PassCommon {
     }	
 	
 	@Override public Void visitTerminal(TerminalNode t) {
-		out(" ",t.getSymbol().getText());
+		writeImpl(" ",t.getSymbol().getText());
 		return null;
 	}
 	

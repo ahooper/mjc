@@ -9,8 +9,6 @@ import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.antlr.v4.runtime.tree.ParseTree;
-import org.antlr.v4.runtime.tree.ParseTreeWalker;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -33,7 +31,7 @@ public class Main {
 	public static final String[] defaultClassPath = {""/*i.e. current directory*/};
 	String[] classPath = defaultClassPath;
 
-	public static final String OUTPUT_DIRECTORY_OPTION = "-L";
+	public static final String OUTPUT_DIRECTORY_OPTION = "-d";
 	public static final String defaultOutputDirectory = null/*i.e. from input file*/; 
 	String outputDirectory = defaultOutputDirectory;
 
@@ -44,6 +42,7 @@ public class Main {
 
     static int errorCount = 0;
 	private static final int ERROR_LIMIT = 100;
+	private static final String ERROR_LINE_D_D_AT_S_S = "Line %d@%d at %s: %s\n";  //printf format string
 
 	public static void main(String[] args) {
 		Main compiler = new Main();
@@ -88,13 +87,17 @@ public class Main {
         System.err.flush();
         errorCount  += 1;
 	}
+
+	public static void error(int line, int charPositionInLine, String token, String text) {
+        errprintf(Main.ERROR_LINE_D_D_AT_S_S, line, charPositionInLine, token, text);
+    }
 	
     public static void error(Token t, String text, String caller) {
         errprintf("Line %d@%d at %s: %s - %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(), text, caller);
     }
 
 	public static void error(Token t, String text) {
-        errprintf("Line %d@%d at %s: %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(), text);
+        error(t.getLine(), t.getCharPositionInLine()+1, t.getText(), text);
     }
 
     public static void error(TerminalNode tn, String text, String caller) {
@@ -110,7 +113,7 @@ public class Main {
     }
 
 	public static void note(Token t, String text) {
-        System.err.printf("Line %d@%d at %s: %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(),
+        System.err.printf(Main.ERROR_LINE_D_D_AT_S_S, t.getLine(), t.getCharPositionInLine()+1, t.getText(),
         		text);
         System.err.flush();
 	}
@@ -127,7 +130,7 @@ public class Main {
 	                            int line, int charPositionInLine,
 	                            String msg,
 	                            RecognitionException e) {
-	        errprintf("line %d@%d at %s:%s\n",line,charPositionInLine,offendingSymbol,msg);
+	        error(line,charPositionInLine,offendingSymbol.toString(),msg);
 	        List<String> stack = ((Parser)recognizer).getRuleInvocationStack();
 	        Collections.reverse(stack);
 	        System.err.println("rule stack: "+stack);
@@ -141,7 +144,7 @@ public class Main {
 		ANTLRInputStream input;
 		errorCount = 0;
 		try {
-
+			
 			String unitName, codePath = ".";;
 			if (arg == null) {
 				input = new ANTLRInputStream(System.in);
@@ -163,6 +166,7 @@ public class Main {
 				System.out.flush();
 			}
 	        String outputDir = (outputDirectory != null) ?  outputDirectory : codePath;
+	        
 	        CobLexer lexer = new CobLexer(input);
 	        CommonTokenStream tokens = new CommonTokenStream(lexer);
 	        CobParser parser = new CobParser(tokens);
@@ -170,15 +174,20 @@ public class Main {
 	        parser.addErrorListener(new VerboseListener()); // add ours
 	        parser.setBuildParseTree(true);
 	        ParseTree tree = parser.file();
-	        PassCommon objectPass = new ObjectPass(this,parser,outputDir);
+
+	        PassData passData = new PassData(this,parser,outputDir);
+	        DefinitionPass definitionPass = new DefinitionPass(passData);
+	        definitionPass.visit(tree);
+	        ObjectPass objectPass = new ObjectPass(passData);
 	        objectPass.visit(tree);
-	        MethodsPass methodsPass = new MethodsPass(this,parser,outputDir);
+	        MethodsPass methodsPass = new MethodsPass(passData);
 	        methodsPass.visit(tree);
-	        CodePass codePass = new CodePass(this,parser,outputDir);
+	        CodePass codePass = new CodePass(passData);
 	        codePass.visit(tree);
-	        TablesPass tablesPass = new TablesPass(this,parser,outputDir);
+	        TablesPass tablesPass = new TablesPass(passData);
 	        tablesPass.visit(tree);
 	        //System.out.println(DIVIDER);
+	        
 		} catch (IOException excp) {
 			error(excp.getMessage());
 		}
