@@ -1,5 +1,7 @@
 package ca.nevdull.cob.compiler;
 
+// Cob to C compiler main program
+
 import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -9,9 +11,11 @@ import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.antlr.v4.runtime.tree.ParseTree;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -21,7 +25,10 @@ import java.util.regex.Pattern;
 
 public class Main {
 
-	public static final String PATH_SEPARATOR = ":"; // or File.pathSeparator
+	///// Compilation options
+	
+	public static final String PATH_SEPARATOR = ":"; 
+			// could use File.pathSeparator, but prefer a platform-independent separator
 
 	public static final String BOOT_CLASS_PATH_OPTION = "-B";
 	public static final String[] defaultBootClassPath = {"/Users/andy/Software/git/mjc/mjc/src/ca/nevdull/cob/lib"};
@@ -40,10 +47,14 @@ public class Main {
 
     public static final String IMPORT_SUFFIX = ".import";
 
+    ///// Error
+    
     static int errorCount = 0;
 	private static final int ERROR_LIMIT = 100;
 	private static final String ERROR_LINE_D_D_AT_S_S = "Line %d@%d at %s: %s\n";  //printf format string
 
+	///// Compiler main program and options processing
+	
 	public static void main(String[] args) {
 		Main compiler = new Main();
 		boolean any = false;
@@ -79,6 +90,8 @@ public class Main {
 		}
 	}
 
+	///// Error display
+	
 	private static void errprintf(String format, Object... args) {
 		//TODO if (errorCount >= ERROR_LIMIT) throw new Exception("too many errors");
 		System.err.print("\033[1;31m");
@@ -123,6 +136,7 @@ public class Main {
         System.out.flush();
 	}
 	
+	// Syntax error display for ANTLR parsing
 	public static class VerboseListener extends BaseErrorListener {
 	    @Override
 	    public void syntaxError(Recognizer<?, ?> recognizer,
@@ -130,32 +144,41 @@ public class Main {
 	                            int line, int charPositionInLine,
 	                            String msg,
 	                            RecognitionException e) {
-	        error(line,charPositionInLine,offendingSymbol.toString(),msg);
+	        error(line,charPositionInLine+1,offendingSymbol.toString(),msg);
 	        List<String> stack = ((Parser)recognizer).getRuleInvocationStack();
 	        Collections.reverse(stack);
 	        System.err.println("rule stack: "+stack);
 	    }
-
 	}
 
-	private static final String DIVIDER = "\n------------------------------------------------------------\n";
+	// Compilation of a single input file, calling the parser, then 
+	// the processing passes in sequence
+	
+	private static final String DIVIDER = ". . . . . . . . . . . . . . .";
 
 	private void compile(String arg) {
 		ANTLRInputStream input;
 		errorCount = 0;
 		try {
-			
-			String unitName, codePath = ".";;
+
+	        // Common data that is used in all processing passes
+	        PassData passData = new PassData(this);
+
+			// Determine variations of input file
+	        
+	        String unitName;
+			passData.outputDir = ".";
 			if (arg == null) {
 				input = new ANTLRInputStream(System.in);
 				unitName = "anonymous";
+				passData.sourceFileName = "STDIN";
 			} else {
 				File inFile = new File(arg);
-				input = new ANTLRInputStream(new FileInputStream(inFile));
+				input = new ANTLRInputStream(new InputStreamReader(new FileInputStream(inFile),"UTF-8"));
 				int x = arg.lastIndexOf(File.separatorChar);
 				if (x >= 0) {
 					unitName = arg.substring(x+1);
-					codePath = arg.substring(0,x);
+					passData.outputDir = arg.substring(0,x);
 				} else {
 					unitName = arg;
 				}
@@ -164,8 +187,12 @@ public class Main {
 				System.out.print("---------- ");
 				System.out.println(arg);
 				System.out.flush();
+				passData.sourceFileName = arg;
 			}
-	        String outputDir = (outputDirectory != null) ?  outputDirectory : codePath;
+			passData.unitName = unitName;
+			if (outputDirectory != null) passData.outputDir = outputDirectory;  // override input file path
+	        
+	        // Parse the source file to produce a syntax tree
 	        
 	        CobLexer lexer = new CobLexer(input);
 	        CommonTokenStream tokens = new CommonTokenStream(lexer);
@@ -174,19 +201,28 @@ public class Main {
 	        parser.addErrorListener(new VerboseListener()); // add ours
 	        parser.setBuildParseTree(true);
 	        ParseTree tree = parser.file();
+	        passData.parser = parser; // to produce meaningful tree node labels
 
-	        PassData passData = new PassData(this,parser,outputDir);
+	        // Walk the syntax tree several times to produce the various output elements
+	        
+	        // Collect the class scope and symbol type structure, and attach it to the parse tree
 	        DefinitionPass definitionPass = new DefinitionPass(passData);
 	        definitionPass.visit(tree);
+	        System.out.println(DIVIDER);
+ 	        // Produce the class instance structure (object fields) to the class definition file
 	        ObjectPass objectPass = new ObjectPass(passData);
 	        objectPass.visit(tree);
-	        MethodsPass methodsPass = new MethodsPass(passData);
+	        // Produce the class methods list structure to the class definition file
+	        MethodsPass methodsPass = new MethodsPass(passData,false/*staticPass*/);
 	        methodsPass.visit(tree);
+	        MethodsPass staticPass = new MethodsPass(passData,true/*staticPass*/);
+	        staticPass.visit(tree);
+	        // Produce the target language code to the class implementation file
 	        CodePass codePass = new CodePass(passData);
 	        codePass.visit(tree);
+	        // Produce the class method list initialization to the class implementation file, 
 	        TablesPass tablesPass = new TablesPass(passData);
 	        tablesPass.visit(tree);
-	        //System.out.println(DIVIDER);
 	        
 		} catch (IOException excp) {
 			error(excp.getMessage());

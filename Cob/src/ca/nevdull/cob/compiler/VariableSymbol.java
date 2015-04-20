@@ -1,5 +1,8 @@
 package ca.nevdull.cob.compiler;
 
+// Representation of a named program variable, which includes
+// object fields, method arguments, and local variables.
+
 import java.io.PrintWriter;
 
 import org.antlr.v4.runtime.Token;

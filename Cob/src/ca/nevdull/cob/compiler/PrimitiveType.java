@@ -1,5 +1,8 @@
 package ca.nevdull.cob.compiler;
 
+// Representation of the primitive types, with a single instance for each
+// void is included as pseudo-type
+
 import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.Map;

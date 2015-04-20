@@ -1,5 +1,7 @@
 package ca.nevdull.cob.compiler;
 
+// Representation of an array type
+
 import java.io.PrintWriter;
 
 public class ArrayType implements Type {

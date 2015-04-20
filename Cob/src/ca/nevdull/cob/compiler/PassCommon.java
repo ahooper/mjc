@@ -1,5 +1,7 @@
 package ca.nevdull.cob.compiler;
 
+// Common elements of each processing pass 
+
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNodeImpl;
 
@@ -12,6 +14,7 @@ public class PassCommon extends CobBaseVisitor<Void> {
 		this.passData = data;
 	}
 
+	// Print syntax tree for debugging
 	public void printContextTree(ParseTree t, String indent) {
 		System.out.print(indent);
 		System.out.print(t.getClass().getSimpleName());
@@ -29,12 +32,14 @@ public class PassCommon extends CobBaseVisitor<Void> {
 		}
 	}
 
+	// Write code to class definitions (classname.h) output file
 	protected void writeDefn(String... list) {
 		for (String s : list) {
 			passData.defnStream.print(s);
 		}
 	}
 
+	// Write code to class implementation (classname.c) output file
 	protected void writeImpl(String... list) {
 		for (String s : list) {
 			passData.implStream.print(s);

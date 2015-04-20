@@ -1,5 +1,7 @@
 package ca.nevdull.cob.compiler;
 
+// Common elements of a symbol scope
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 

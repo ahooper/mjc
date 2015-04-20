@@ -1,5 +1,8 @@
 package ca.nevdull.cob.compiler;
 
+// Produce the class method list initialization to the class implementation file,
+// and the class symbol outline to the import file
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Map.Entry;
@@ -15,16 +18,36 @@ public class TablesPass extends PassCommon {
 
 	@Override public Void visitKlass(CobParser.KlassContext ctx) {
 		String name = ctx.name.getText();
-		Token parent = ctx.parent;
-		writeImpl("struct ",name,"_Methods ",name,"_Methods = {\n");
+		Token base = ctx.base;
+		writeImpl("struct ",name,"_Class ",name,"_Class={\n");
+		writeImpl("  .class={\n");
+		writeImpl("    .classInitialized=0,\n");
+		writeImpl("    .className=\"",name,"\",\n");
+		writeImpl("  //.packageName=\n");
+		writeImpl("  //.enclosingClassName=\n");
+		writeImpl("  //.enclosingMethodName=\n");
+		if (base != null) {
+			writeImpl("    .baseType=&",base.getText(),"_Class,\n");
+		} else {
+			writeImpl("    .baseType=0,\n");
+		}
+		writeImpl("  //.arrayType=\n");
+		writeImpl("  },\n");
+		writeImpl("  .methods={\n");
+		if (base != null) {
+			writeImpl("    ._base=&",base.getText(),"_Methods,\n");
+		}
 		for (CobParser.MemberContext decl : ctx.member()) {
 			visit(decl);
 		}
+		writeImpl("  }\n");
 		writeImpl("};\n");
 		// Save symbols for import
         try {
 			ClassSymbol klass = ctx.defn;
 			PrintWriter impWriter = passData.openFileWriter(klass.getName(),Main.IMPORT_SUFFIX);
+			impWriter.append("// Generated at ").append(passData.timeStamp).append("\n");
+			impWriter.append("// From ").append(passData.sourceFileName).append("\n");
 			for (Entry<String, Symbol> globEnt : passData.globals.getMembers().entrySet()) {
 				Symbol globSym = globEnt.getValue();
 				if (globSym == klass) continue;
@@ -40,6 +63,7 @@ public class TablesPass extends PassCommon {
 	
 	@Override public Void visitMethod(CobParser.MethodContext ctx) {
 		//	'static'? type ID '(' arguments? ')' '{' code '}'
+		if (ctx.stat != null) return null;
 		CobParser.KlassContext parent = (CobParser.KlassContext)ctx.getParent();
 		String className = parent.name.getText();
 		TerminalNode id = ctx.ID();

@@ -5,12 +5,13 @@ file
 	;
 
 klass																	locals [ ClassSymbol defn ]
-	:	'class' name=ID ':' ( parent=ID | 'null' ) '{' member* '}'
+	:	'class' name=ID ':' ( base=ID | 'null' ) '{' member* '}'
 	;
 
 member																	locals [ Symbol defn ]
-	:	'static'? type ID '(' arguments? ')' compoundStatement			# method
-	|	'static'? type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'	# field
+	:	stat='static'? type ID '(' arguments? ')' compoundStatement						# method
+	|	'native' type ID '(' arguments? ')' ';'											# nativeMethod
+	|	stat='static'? type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'	# field
 	;
 
 arguments
@@ -41,9 +42,12 @@ typeName																locals [ Scope refScope, Type tipe ]
 primary																	locals [ Scope refScope, Type tipe ]
     :   ID																# namePrimary
     |	'this'															# thisPrimary
-    |   Number															# numberPrimary
+    |   Integer															# integerPrimary
+    |   Floating														# floatingPrimary
     |   String+															# stringPrimary
     |	'null'															# nullPrimary
+    |	'true'															# truePrimary
+    |	'false'															# falsePrimary
     |   '(' sequence ')'												# parenPrimary
     |   primary '[' sequence ']'										# indexPrimary
     |   primary '(' expressionList? ')'									# callPrimary
@@ -107,22 +111,23 @@ blockItem
     ;
 
 declaration																	locals [ Symbol defn ]
-	:	type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'	
+	:	type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'
+		//TODO static local
 	;
 
 statement
-    :   ID ':' statement
-    |   compoundStatement
-    |   sequence? ';'
-    |   'if' '(' sequence ')' statement ('else' statement)?
-    |   'switch' '(' sequence ')' '{' switchItem+ '}'
-    |   'while' '(' sequence ')' statement
-    |   'do' statement 'while' '(' sequence ')' ';'
-    |   'for' '(' sequence? ';' sequence? ';' sequence? ')' statement
-    |   'for' '(' declaration sequence? ';' sequence? ')' statement
-    |   'continue' ';'
-    |   'break' ';'
-    |   'return' sequence? ';'
+    :   ID ':' statement													# labelStatement
+    |   compoundStatement													# cmpdStatement
+    |   sequence? ';'														# expressionStatement
+    |   'if' '(' sequence ')' statement ('else' statement)?					# ifStatement
+    |   'switch' '(' sequence ')' '{' switchItem+ '}'						# switchStatement
+    |   'while' '(' sequence ')' statement									# whileStatement
+    |   'do' statement 'while' '(' sequence ')' ';'							# doStatement
+    |   'for' '(' sequence? ';' sequence? ';' sequence? ')' statement		# forStatement
+    |   'for' '(' declaration sequence? ';' sequence? ')' statement			# forDeclStatement
+    |   'continue' ';'														# continueStatement
+    |   'break' ';'															# breakStatement
+    |   'return' sequence? ';'												# returnStatement
     ;
 
 switchItem
@@ -131,9 +136,11 @@ switchItem
     ;
 
 Reserved
-	:	'break' | 'case' | 'char' | 'const' | 'continue' | 'default' | 'do' | 'double' | 'else' | 'enum' | 'extern'
-	|	'float' | 'for' | 'if' | 'int' | 'long' | 'return' | 'short' | 'signed' | 'sizeof' | 'static' | 'struct'
-	|	'switch' | 'this' | 'typedef' | 'unsigned' | 'void' | 'while' | 'boolean' | 'byte' | 'class' | 'null'
+	:	'break' | 'case'  | 'continue' | 'default' | 'do' | 'else'								// Cob and C 
+	|	'for' | 'if' | 'return' | 'static' | 'switch' | 'while' 
+	|	'char' | 'double' | 'float' | 'int' | 'long' | 'short' | 'void'							// Cob and C types
+	| 	'boolean' | 'byte' | 'class' | 'false' | 'native' | 'null' | 'super' | 'this' | 'true'  // Cob only
+	|	'const' | 'enum' | 'extern' | 'signed' | 'sizeof' | 'struct' | 'typedef' | 'unsigned'	// C only
 	;
 
 LeftParen : '(';
@@ -194,22 +201,28 @@ ID
 	:	IDfirst IDrest*
 	;
 	
-fragment IDfirst
+fragment
+IDfirst
 	:	[A-Za-z_]
 	;
 	
-fragment IDrest
+fragment
+IDrest
 	:	IDfirst
 	|	[0-9]
 	;
 
-Number
+Integer
     :   [1-9] Digits? [lL]?
-    |   Fractional Exponent? [fFlL]?
-    |   Digits Exponent [fFlL]?
-    |   '0' [xX] HexaNumber
+    |   '0' [xX] HexaDigits [lL]?
     |	'0'
     ;
+
+Floating
+	:   Fractional Exponent? [fFlL]?
+    |   Digits Exponent [fFlL]?
+    |	'0' [xX] HexaFloat
+	;
 
 fragment
 Fractional
@@ -228,9 +241,8 @@ Digits
     ;
     
 fragment
-HexaNumber
-    :   HexaDigits [lL]?
-    |   HexaFractional BinaryExponent [fFlL]?
+HexaFloat
+    :   HexaFractional BinaryExponent [fFlL]?
     |   HexaDigits BinaryExponent [fFlL]?
     ;
 

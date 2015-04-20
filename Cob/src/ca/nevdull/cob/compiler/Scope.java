@@ -1,5 +1,7 @@
 package ca.nevdull.cob.compiler;
 
+// Representation of a source language symbol scope 
+
 public interface Scope {
 
 	public abstract String getName();

@@ -1,5 +1,9 @@
 package ca.nevdull.cob.compiler;
 
+// Representation of a named program symbol
+// There are specializations for classes, methods, and variables (which includes
+// fields, method arguments, and local variables.
+
 import java.io.PrintWriter;
 
 import org.antlr.v4.runtime.Token;
@@ -9,6 +13,7 @@ public class Symbol {
 	String name;
 	Type type;
 	Scope scope;
+	boolean isStatic;
 	
 	public Symbol(String name, Type type) {
 		this.name = name;
@@ -43,6 +48,14 @@ public class Symbol {
 
 	public void setScope(Scope scope) {
 		this.scope = scope;	
+	}
+
+	public boolean isStatic() {
+		return isStatic;
+	}
+
+	public void setStatic(boolean isStatic) {
+		this.isStatic = isStatic;
 	}
 
 	public void writeImport(PrintWriter pw) {

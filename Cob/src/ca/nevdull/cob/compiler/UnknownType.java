@@ -1,5 +1,7 @@
 package ca.nevdull.cob.compiler;
 
+// Representation of unknown types, just a single, common instance
+
 import java.io.PrintWriter;
 
 public class UnknownType implements Type {

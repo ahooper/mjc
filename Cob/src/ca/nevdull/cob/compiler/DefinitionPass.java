@@ -1,5 +1,7 @@
 package ca.nevdull.cob.compiler;
 
+// Collect the class scope and symbol type structure, and attach it to the parse tree
+
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
@@ -30,20 +32,21 @@ public class DefinitionPass extends PassCommon {
 
 	@Override public Void visitKlass(CobParser.KlassContext ctx) {
 		Token nameToken = ctx.name;
-		Token parentToken = ctx.parent;
-		ClassSymbol parentClass = null;
-		if (parentToken == null) {
-			parentClass = null;
+		Token baseToken = ctx.base;
+		ClassSymbol baseClass = null;
+		if (baseToken == null) {
+			baseClass = null;
 		} else {
-			String parentName = parentToken.getText();
-			Symbol parentSymbol = currentScope.find(parentName);
-			if (parentSymbol == null) Main.error(parentToken,parentName+" is not defined");
-			else if (parentSymbol instanceof ClassSymbol) parentClass = (ClassSymbol)parentSymbol;
-			else Main.error(parentToken,parentName+" is not a class");
+			String baseName = baseToken.getText();
+			Symbol baseSymbol = currentScope.find(baseName);
+			if (baseSymbol == null) Main.error(baseToken,baseName+" is not defined");
+			else if (baseSymbol instanceof ClassSymbol) baseClass = (ClassSymbol)baseSymbol;
+			else Main.error(baseToken,baseName+" is not a class");
 		}
-		ClassSymbol thisClass = new ClassSymbol(nameToken, currentScope, parentClass);
+		ClassSymbol thisClass = new ClassSymbol(nameToken, currentScope, baseClass);
 		thisClass.setType(thisClass);
 		ctx.defn = thisClass;
+		currentScope.add(thisClass);
 		enterScope(thisClass);
 		for (CobParser.MemberContext decl : ctx.member()) {
 			visit(decl);
@@ -58,6 +61,7 @@ public class DefinitionPass extends PassCommon {
 		visitType(typeCtx);
 		TerminalNode id = ctx.ID();
 		MethodSymbol methSym = new MethodSymbol(id.getSymbol(),currentScope,typeCtx.tipe);
+		methSym.setStatic(ctx.stat != null);
 		currentScope.add(methSym);
 		enterScope(methSym);
 		CobParser.ArgumentsContext arguments = ctx.arguments();
@@ -71,13 +75,36 @@ public class DefinitionPass extends PassCommon {
 		return null;
 	}
 	
+	@Override public Void visitNativeMethod(CobParser.NativeMethodContext ctx) {
+		//	'native' type ID '(' arguments? ')' ';'
+		CobParser.TypeContext typeCtx = ctx.type();
+		visitType(typeCtx);
+		TerminalNode id = ctx.ID();
+		MethodSymbol methSym = new MethodSymbol(id.getSymbol(),currentScope,typeCtx.tipe);
+		methSym.setNative(true);
+		currentScope.add(methSym);
+		enterScope(methSym);
+		CobParser.ArgumentsContext arguments = ctx.arguments();
+		if (arguments != null) {
+			for (CobParser.ArgumentContext argument : arguments.argument()) {
+				visit(argument);
+			}
+		}
+		leaveScope();
+		return null;
+	}
+	
 	@Override public Void visitField(CobParser.FieldContext ctx) {
 		//	'static'? type ID ( '=' code )? ( ',' ID ( '=' code )? )* ';'
 		CobParser.TypeContext typeCtx = ctx.type();
 		visitType(typeCtx);
 		for (TerminalNode id : ctx.ID()) {
 			VariableSymbol varSym = new VariableSymbol(id.getSymbol(),typeCtx.tipe);
+			varSym.setStatic(ctx.stat != null);
 			currentScope.add(varSym);
+		}
+		for (CobParser.ExpressionContext e : ctx.expression()) {
+			visit(e);  // get reference scopes for initializations
 		}
 		return null;
 	}
@@ -129,7 +156,7 @@ public class DefinitionPass extends PassCommon {
 	}
 	
 	@Override public Void visitCompoundStatement(CobParser.CompoundStatementContext ctx) {
-		enterScope(new BaseScope("local@"+ctx.start.getLine(),currentScope));
+		enterScope(new LocalScope(ctx.start.getLine(),currentScope));
 		for (CobParser.BlockItemContext item : ctx.blockItem()) {
 			visitBlockItem(item);
 		}
@@ -145,7 +172,16 @@ public class DefinitionPass extends PassCommon {
 			VariableSymbol varSym = new VariableSymbol(id.getSymbol(),typeCtx.tipe);
 			currentScope.add(varSym);
 		}
+		for (CobParser.ExpressionContext e : ctx.expression()) {
+			visit(e);  // get reference scopes for initializations
+		}
 		return null;
 	}
+
+    @Override public Void visitStringPrimary(CobParser.StringPrimaryContext ctx) {
+    	//TODO assign a static struct to hold unique strings
+        visitChildren(ctx);
+        return null;
+    }
 	
 }

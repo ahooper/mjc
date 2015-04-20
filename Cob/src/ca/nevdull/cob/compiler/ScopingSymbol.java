@@ -1,5 +1,8 @@
 package ca.nevdull.cob.compiler;
 
+// Representation of a source language symbol that includes a scope
+// It is used for classes with members, and methods with arguments.
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
