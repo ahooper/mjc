@@ -17,6 +17,10 @@ public class ClassSymbol extends ScopingSymbol implements Type {
 		this.base = base;
 	}
 	
+	public ClassSymbol getBase() {
+		return base;
+	}
+
 	public Symbol findMember(String name) {
 		Symbol s = members.get(name);
 		if (s != null) return s;
@@ -47,5 +51,15 @@ public class ClassSymbol extends ScopingSymbol implements Type {
 
 	public void writeImportType(PrintWriter pw) {
 		pw.append(name);
+	}
+
+	@Override
+	public String getNameString() {
+		return getName();
+	}
+
+	@Override
+	public String getArrayString() {
+		return "";
 	}
 }

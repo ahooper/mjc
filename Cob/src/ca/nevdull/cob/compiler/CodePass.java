@@ -23,34 +23,84 @@ public class CodePass extends PassCommon {
 		String name = ctx.name.getText();
 		klassNest.addLast(name);
 		try {
-			passData.implStream = passData.openFileStream(name, ".c");
+			passData.implStream = passData.openFileStream(name, Main.IMPL_SUFFIX);
 		} catch (FileNotFoundException excp) {
 			Main.error("Unable to open implementations stream "+excp.getMessage());
 		}
 		writeImpl("// Generated at ",passData.timeStamp,"\n");
 		writeImpl("// From ",passData.sourceFileName,"\n");
-		writeImpl("#include \"",name,".h\"\n");
-		for (CobParser.MemberContext decl : ctx.member()) {
-			visit(decl);
+		writeImpl("#include \"",name,Main.DEFN_SUFFIX,"\"\n");
+		for (CobParser.MemberContext member : ctx.member()) {
+			visit(member);
 		}
+		if (ctx.defn.findMember(name) == null) {
+			// define a default constructor
+			writeImpl("void ",name,"_",name,"() {\n");
+			ClassSymbol base = ctx.defn.getBase();
+			if (base != null) {
+				writeImpl(" ",base.getName(),"();\n");
+			}
+			writeImpl("}\n");
+		}
+		doInitializers(ctx, name, false);
+		doInitializers(ctx, name, true);
+		writeImpl("void ",PassCommon.INIT,"_",name,"() {\n");
+		writeImpl("//LATER lock if multi-threads\n");
+		writeImpl("int initBegan = ",name,"_Class.classInitializationBegan;\n");
+		writeImpl("// Whether or not class initialization had already began, it has begun now\n");
+		writeImpl(name,"_Class.classInitializationBegan = 1;\n");
+		if (ctx.base != null) {
+			//TODO call base initialization
+		}
+		//TODO
+		writeImpl(name,"_Class.classInitialized = 1;\n");
+		writeImpl("}\n");
 		klassNest.removeLast();
 		return null;
 	}
+
+	private void doInitializers(CobParser.KlassContext ctx, String name, boolean statics) {
+		String method = statics ? PassCommon.CLASSINIT : PassCommon.INSTANCEINIT;
+		writeImpl("void ",name,"_",method,"(");		
+		if (!statics) writeImpl(name," this");
+		writeImpl(") {\n");
+		writeImpl(" COB_ENTER_METHOD(",name,",\"",method,"\")\n");
+		writeImpl(" COB_SOURCE_FILE(\"",passData.sourceFileName,"\")\n");
+		for (CobParser.MemberContext member : ctx.member()) {
+			if (member instanceof CobParser.InitializerContext) {
+				CobParser.InitializerContext init = (CobParser.InitializerContext)member;
+				if ((init.stat != null) ^ statics) {
+				} else {
+					visitCompoundStatement(init.compoundStatement());
+				}
+			} else if (member instanceof CobParser.FieldListContext) {
+				CobParser.FieldListContext list = (CobParser.FieldListContext)member;
+				if ((list.stat == null) ^ statics) {
+					for (CobParser.FieldContext field : list.field()) {
+						CobParser.ExpressionContext expr = field.expression();
+						if (expr != null) {
+							writeImpl(" ",statics?(name+"_"):"this->fields.",field.ID().getText(),"=");
+							visit(expr);
+							writeImpl(";\n");
+						}
+					}
+				}
+			}
+		}
+		writeImpl("}\n");
+	}
 	
 	@Override public Void visitMethod(CobParser.MethodContext ctx) {
-		//	'static'? type ID '(' arguments? ')' '{' code '}'
+		//	'static'? type ID '(' arguments? ')' compoundStatement
 		String className = klassNest.getLast();
-		CobParser.TypeContext type = ctx.type();
-		String typeName = type.typeName().getText();
-		String array = "";
-		if (type.getChildCount() > 1) array = "*";
+		Type type = ctx.type().tipe;
 		TerminalNode id = ctx.ID();
 		String sep = "";
 		if (ctx.stat == null) {
-			writeImpl("static ",typeName," ",array,className,"_",id.getText(),"(",className," this");
+			writeImpl("static ",type.getNameString()," ",type.getArrayString(),className,"_",id.getText(),"(",className," this");
 			sep = ",";
 		} else {
-			writeImpl(typeName," ",array,className,"_",id.getText(),"(");
+			writeImpl(type.getNameString()," ",type.getArrayString(),className,"_",id.getText(),"(");
 		}
 		CobParser.ArgumentsContext arguments = ctx.arguments();
 		if (arguments != null) {
@@ -65,17 +115,38 @@ public class CodePass extends PassCommon {
 		return null;
 	}
 	
+	@Override public Void visitConstructor(CobParser.ConstructorContext ctx) {
+		//	ID '(' arguments? ')' compoundStatement
+		String className = klassNest.getLast();
+		TerminalNode id = ctx.ID();
+		String sep = "";
+		writeImpl(className,"_",id.getText(),"(");
+		CobParser.ArgumentsContext arguments = ctx.arguments();
+		if (arguments != null) {
+			for (CobParser.ArgumentContext argument : arguments.argument()) {
+				writeImpl(sep);  sep = ",";
+				visit(argument);
+			}
+		}
+		writeImpl(")");
+		visit(ctx.compoundStatement());
+		writeImpl("\n");
+		return null;
+	}
+	
+	@Override public Void visitFieldList(CobParser.FieldListContext ctx) {
+		//	'static'? type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'
+		return null;
+	}
+	
 	@Override public Void visitField(CobParser.FieldContext ctx) {
-		//	'static'? type ID ( '=' code )? ( ',' ID ( '=' code )? )* ';'
+		//	ID ( '=' expression )?
 		return null;
 	}
 	
 	@Override public Void visitArgument(CobParser.ArgumentContext ctx) {
-		CobParser.TypeContext type = ctx.type();
-		String typeName = type.typeName().getText();
-		String array = "";
-		if (type.getChildCount() > 1) array = "*";
-		writeImpl(typeName," ",array,ctx.ID().getText());
+		Type type = ctx.type().tipe;
+		writeImpl(type.getNameString()," ",type.getArrayString(),ctx.ID().getText());
 		return null;
 	}
 
@@ -88,10 +159,7 @@ public class CodePass extends PassCommon {
     	}
     	ctx.tipe = sym.type;
     	Scope scope = sym.getScope();
-    	System.out.print(sym);
-    	if (sym.isStatic()) System.out.print(" static");
-    	System.out.print(" scope=");  System.out.print(scope);
-    	System.out.println();
+    	Main.debug("%s%s scope=%s", sym, (sym.isStatic())?" static":"", scope);
     	if (sym instanceof ClassSymbol) {
 			writeImpl(id);    		    		
     	} else if (sym instanceof MethodSymbol) {
@@ -312,6 +380,15 @@ public class CodePass extends PassCommon {
     @Override public Void visitCompoundStatement(CobParser.CompoundStatementContext ctx) {
     	writeImpl("{\n");
     	if (ctx.getParent() instanceof CobParser.MethodContext) {
+    		MethodSymbol methodDefn = (MethodSymbol) ((CobParser.MethodContext)ctx.getParent()).defn;
+    		writeImpl(" COB_ENTER_METHOD(",klassNest.getLast(),",\"",methodDefn.getName(),"\")\n");
+    		if (methodDefn.isStatic()) writeImpl(" COB_CLASS_INIT(",klassNest.getLast(),")\n");
+    		writeImpl(" COB_SOURCE_FILE(\"",passData.sourceFileName,"\")\n");
+    	} else if (ctx.getParent() instanceof CobParser.ConstructorContext) {
+    		MethodSymbol methodDefn = (MethodSymbol) ((CobParser.ConstructorContext)ctx.getParent()).defn;
+    		assert methodDefn.isStatic();
+    		writeImpl(" COB_ENTER_METHOD(",klassNest.getLast(),",\"",methodDefn.getName(),"\")\n");
+    		writeImpl(" COB_CLASS_INIT(",klassNest.getLast(),")\n");
     		writeImpl(" COB_SOURCE_FILE(\"",passData.sourceFileName,"\")\n");
     	}
     	for (CobParser.BlockItemContext item : ctx.blockItem()) {
@@ -329,7 +406,26 @@ public class CodePass extends PassCommon {
     }
 
     @Override public Void visitDeclaration(CobParser.DeclarationContext ctx) {
-        visitChildren(ctx);
+		CobParser.TypeContext typeCtx = ctx.type();
+		String sep = "";
+		for (CobParser.VariableContext var : ctx.variable()) {
+			writeImpl(sep);
+			visitVariable(var);
+			sep = ",";
+		}
+        writeImpl(";\n");
+        return null;
+    }
+
+    @Override public Void visitVariable(CobParser.VariableContext ctx) {
+		CobParser.DeclarationContext list = (CobParser.DeclarationContext)ctx.getParent();
+		Type type = list.type().tipe;
+		writeImpl(" ",type.getNameString()," ",type.getArrayString(),ctx.ID().getText());
+		CobParser.ExpressionContext expr = ctx.expression();
+		if (expr != null) {
+			writeImpl("=");
+			visit(expr);
+		}
         return null;
     }
 
@@ -410,6 +506,7 @@ public class CodePass extends PassCommon {
     	if (seq != null) {
     		visitSequence(seq);
     	}
+    	writeImpl(";");
         return null;
     }
 

@@ -9,9 +9,11 @@ klass																	locals [ ClassSymbol defn ]
 	;
 
 member																	locals [ Symbol defn ]
-	:	stat='static'? type ID '(' arguments? ')' compoundStatement						# method
-	|	'native' type ID '(' arguments? ')' ';'											# nativeMethod
-	|	stat='static'? type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'	# field
+	:	stat='static'? type ID '(' arguments? ')' compoundStatement		# method
+	|	ID '(' arguments? ')' compoundStatement							# constructor
+	|	'native' type ID '(' arguments? ')' ';'							# nativeMethod
+	|	stat='static'? type field ( ',' field )* ';'					# fieldList
+	|	stat='static'? compoundStatement								# initializer
 	;
 
 arguments
@@ -37,6 +39,10 @@ typeName																locals [ Scope refScope, Type tipe ]
 	|	'short'
 	|	'void'
 	|	ID
+	;
+
+field
+	:	ID ( '=' expression )?
 	;
 
 primary																	locals [ Scope refScope, Type tipe ]
@@ -111,8 +117,12 @@ blockItem
     ;
 
 declaration																	locals [ Symbol defn ]
-	:	type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'
+	:	type variable ( variable )* ';'
 		//TODO static local
+	;
+	
+variable
+	:	ID ( '=' expression )?
 	;
 
 statement

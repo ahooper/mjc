@@ -46,6 +46,8 @@ public class Main {
 	HashSet<String> trace = new HashSet<String>();
 
     public static final String IMPORT_SUFFIX = ".import";
+    public static final String DEFN_SUFFIX = ".h";
+    public static final String IMPL_SUFFIX = ".c";
 
     ///// Error
     
@@ -131,9 +133,14 @@ public class Main {
         System.err.flush();
 	}
 
-	public static void debug(String text) {
-        System.out.println(text);
+	public static void debug(String format, Object... args) {
+		System.out.printf(format, args);
+		System.out.println();
         System.out.flush();
+	}
+
+	public static void debugn(String format, Object... args) {
+		System.out.printf(format, args);
 	}
 	
 	// Syntax error display for ANTLR parsing

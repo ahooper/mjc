@@ -9,4 +9,8 @@ public interface Type {
 
 	// Write the type to the class import file
 	public void writeImportType(PrintWriter pw);
+
+	public String getNameString();
+
+	public String getArrayString();
 }

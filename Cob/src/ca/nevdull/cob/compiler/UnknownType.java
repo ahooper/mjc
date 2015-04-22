@@ -18,4 +18,14 @@ public class UnknownType implements Type {
 		pw.append("?unknown?");
 	}
 
+	@Override
+	public String getNameString() {
+		return "_unknown_";
+	}
+
+	@Override
+	public String getArrayString() {
+		return "";
+	}
+
 }

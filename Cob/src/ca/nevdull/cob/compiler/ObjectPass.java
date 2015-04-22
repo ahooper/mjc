@@ -5,7 +5,6 @@ package ca.nevdull.cob.compiler;
 import java.io.FileNotFoundException;
 
 import org.antlr.v4.runtime.Token;
-import org.antlr.v4.runtime.tree.TerminalNode;
 
 public class ObjectPass extends PassCommon {
 
@@ -16,7 +15,7 @@ public class ObjectPass extends PassCommon {
 	@Override public Void visitKlass(CobParser.KlassContext ctx) {
 		String name = ctx.name.getText();
 		try {
-			passData.defnStream = passData.openFileStream(name, ".h");
+			passData.defnStream = passData.openFileStream(name, Main.DEFN_SUFFIX);
 		} catch (FileNotFoundException excp) {
 			Main.error("Unable to open defintions stream "+excp.getMessage());
 		}
@@ -26,13 +25,13 @@ public class ObjectPass extends PassCommon {
 		writeDefn("#define ",name,"_DEFN\n");
 		writeDefn("#include \"cob.h\"\n");
 		Token base = ctx.base;
-		if (base != null) writeDefn("#include \"",base.getText(),".h\"\n");
+		if (base != null) writeDefn("#include \"",base.getText(),Main.DEFN_SUFFIX,"\"\n");
 		writeDefn("typedef struct ",name,"_Object *",name,";\n");
 		writeDefn("struct ",name,"_Class;\n");
 		writeDefn("struct ",name,"_Fields {\n");
 		if (base != null) writeDefn("  struct ",base.getText(),"_Fields _base;\n");
-		for (CobParser.MemberContext decl : ctx.member()) {
-			visit(decl);
+		for (CobParser.MemberContext member : ctx.member()) {
+			visit(member);
 		}
 		writeDefn("};\n");
 		writeDefn("struct ",name,"_Object {\n");
@@ -42,16 +41,20 @@ public class ObjectPass extends PassCommon {
 		return null;
 	}
 	
-	@Override public Void visitField(CobParser.FieldContext ctx) {
-		//	'static'? type ID ( '=' code )? ( ',' ID ( '=' code )? )* ';'
+	@Override public Void visitFieldList(CobParser.FieldListContext ctx) {
+		//	'static'? type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'
 		if (ctx.stat != null) return null;  // static fields are not included in the object instance
-		CobParser.TypeContext type = ctx.type();
-		String typeName = type.typeName().getText();
-		String array = "";
-		if (type.getChildCount() > 1) array = "*";
-		for (TerminalNode id : ctx.ID()) {
-			writeDefn("  ",typeName," ",array,id.getText(),";\n");
+		for (CobParser.FieldContext field : ctx.field()) {
+			visitField(field);
 		}
+		return null;
+	}
+	
+	@Override public Void visitField(CobParser.FieldContext ctx) {
+		//	ID ( '=' expression )?
+		CobParser.FieldListContext list = (CobParser.FieldListContext)ctx.getParent();
+		Type type = list.type().tipe;
+		writeDefn("  ",type.getNameString()," ",type.getArrayString(),ctx.ID().getText(),";\n");
 		return null;
 	}
 	

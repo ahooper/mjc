@@ -43,4 +43,14 @@ public class PrimitiveType extends Symbol implements Type {
 		pw.append(name);
 	}
 
+	@Override
+	public String getNameString() {
+		return hostType;
+	}
+
+	@Override
+	public String getArrayString() {
+		return "";
+	}
+
 }

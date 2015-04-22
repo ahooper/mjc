@@ -7,6 +7,9 @@ import org.antlr.v4.runtime.tree.TerminalNodeImpl;
 
 public class PassCommon extends CobBaseVisitor<Void> {
 
+	protected static final String INSTANCEINIT = "_init_";
+	protected static final String CLASSINIT = "_classinit_";
+	protected static final String INIT = "__INIT";
 	protected PassData passData;
 
 	public PassCommon(PassData data) {
@@ -16,13 +19,11 @@ public class PassCommon extends CobBaseVisitor<Void> {
 
 	// Print syntax tree for debugging
 	public void printContextTree(ParseTree t, String indent) {
-		System.out.print(indent);
-		System.out.print(t.getClass().getSimpleName());
+		Main.debugn("%s%s",indent,t.getClass().getSimpleName());
 		if (t instanceof TerminalNodeImpl) {
-			System.out.print(" ");
-			System.out.print((TerminalNodeImpl)t);
+			Main.debugn(" %s", (TerminalNodeImpl)t);
 		}
-		System.out.println();
+		Main.debug("");
 		if (t.getChildCount() == 0) {
 		} else {
 			indent = "    "+indent;
@@ -32,14 +33,14 @@ public class PassCommon extends CobBaseVisitor<Void> {
 		}
 	}
 
-	// Write code to class definitions (classname.h) output file
+	// Write to class definitions (classname.h) output file
 	protected void writeDefn(String... list) {
 		for (String s : list) {
 			passData.defnStream.print(s);
 		}
 	}
 
-	// Write code to class implementation (classname.c) output file
+	// Write to class implementation (classname.c) output file
 	protected void writeImpl(String... list) {
 		for (String s : list) {
 			passData.implStream.print(s);

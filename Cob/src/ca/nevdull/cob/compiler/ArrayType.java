@@ -25,4 +25,14 @@ public class ArrayType implements Type {
 		elementType.writeImportType(pw);
 		pw.append("[]");
 	}
+
+	@Override
+	public String getNameString() {
+		return elementType.getNameString();
+	}
+
+	@Override
+	public String getArrayString() {
+		return "*";
+	}
 }

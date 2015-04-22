@@ -16,17 +16,12 @@ public class DefinitionPass extends PassCommon {
 	}
     
     private void enterScope(Scope newScope) {
-    	System.out.print("enter ");
-	    System.out.print(newScope);
-	    System.out.print(" enclosing=");
-	    System.out.print(newScope.getEnclosingScope());
-	    System.out.println();
+    	Main.debug("enter %s enclosing=%s", newScope, newScope.getEnclosingScope());
 	    currentScope = newScope;
     }
     
     private void leaveScope() {
-    	System.out.print("leave ");
-	    System.out.println(currentScope);
+    	Main.debug("leave %s", currentScope);
 	    currentScope = currentScope.getEnclosingScope();
     }
 
@@ -48,20 +43,45 @@ public class DefinitionPass extends PassCommon {
 		ctx.defn = thisClass;
 		currentScope.add(thisClass);
 		enterScope(thisClass);
-		for (CobParser.MemberContext decl : ctx.member()) {
-			visit(decl);
+		for (CobParser.MemberContext member : ctx.member()) {
+			visit(member);
 		}
 		leaveScope();
 		return null;
 	}
 	
 	@Override public Void visitMethod(CobParser.MethodContext ctx) {
-		//	'static'? type ID '(' arguments? ')' '{' code '}'
+		//	'static'? type ID '(' arguments? ')' compoundStatement
 		CobParser.TypeContext typeCtx = ctx.type();
 		visitType(typeCtx);
 		TerminalNode id = ctx.ID();
 		MethodSymbol methSym = new MethodSymbol(id.getSymbol(),currentScope,typeCtx.tipe);
 		methSym.setStatic(ctx.stat != null);
+		ctx.defn = methSym;
+		currentScope.add(methSym);
+		enterScope(methSym);
+		CobParser.ArgumentsContext arguments = ctx.arguments();
+		if (arguments != null) {
+			for (CobParser.ArgumentContext argument : arguments.argument()) {
+				visit(argument);
+			}
+		}
+		visitCompoundStatement(ctx.compoundStatement());
+		leaveScope();
+		return null;
+	}
+	
+	@Override public Void visitConstructor(CobParser.ConstructorContext ctx) {
+		//	ID '(' arguments? ')' compoundStatement
+		TerminalNode id = ctx.ID();
+		String name = id.getText();
+		if (currentScope instanceof ClassSymbol
+				&& name.equals(((ClassSymbol)currentScope).getName()) ) {
+		} else {
+			Main.error(id,"Constructor name must match class name");
+		}
+		MethodSymbol methSym = new MethodSymbol(id.getSymbol(),currentScope,PrimitiveType.voidType);
+		methSym.setStatic(true);
 		currentScope.add(methSym);
 		enterScope(methSym);
 		CobParser.ArgumentsContext arguments = ctx.arguments();
@@ -94,16 +114,30 @@ public class DefinitionPass extends PassCommon {
 		return null;
 	}
 	
-	@Override public Void visitField(CobParser.FieldContext ctx) {
-		//	'static'? type ID ( '=' code )? ( ',' ID ( '=' code )? )* ';'
+	@Override public Void visitInitializer(CobParser.InitializerContext ctx) {
+		//	'static'? compoundStatement
+		visitCompoundStatement(ctx.compoundStatement());
+		return null;
+	}
+	
+	@Override public Void visitFieldList(CobParser.FieldListContext ctx) {
+		//	'static'? type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'
 		CobParser.TypeContext typeCtx = ctx.type();
 		visitType(typeCtx);
-		for (TerminalNode id : ctx.ID()) {
-			VariableSymbol varSym = new VariableSymbol(id.getSymbol(),typeCtx.tipe);
-			varSym.setStatic(ctx.stat != null);
-			currentScope.add(varSym);
+		for (CobParser.FieldContext field : ctx.field()) {
+			visitField(field);
 		}
-		for (CobParser.ExpressionContext e : ctx.expression()) {
+		return null;
+	}
+	
+	@Override public Void visitField(CobParser.FieldContext ctx) {
+		//	ID ( '=' expression )?
+		CobParser.FieldListContext list = (CobParser.FieldListContext)ctx.getParent();
+		VariableSymbol varSym = new VariableSymbol(ctx.ID().getSymbol(),list.type().tipe);
+		varSym.setStatic(list.stat != null);
+		currentScope.add(varSym);
+		CobParser.ExpressionContext e = ctx.expression();
+		if (e != null) {
 			visit(e);  // get reference scopes for initializations
 		}
 		return null;
@@ -168,16 +202,32 @@ public class DefinitionPass extends PassCommon {
 		//	type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'	
 		CobParser.TypeContext typeCtx = ctx.type();
 		visitType(typeCtx);
-		for (TerminalNode id : ctx.ID()) {
-			VariableSymbol varSym = new VariableSymbol(id.getSymbol(),typeCtx.tipe);
-			currentScope.add(varSym);
+		for (CobParser.VariableContext var : ctx.variable()) {
+			visitVariable(var);
 		}
-		for (CobParser.ExpressionContext e : ctx.expression()) {
+		return null;
+	}
+	
+	@Override public Void visitVariable(CobParser.VariableContext ctx) {
+		//	ID ( '=' expression )?
+		CobParser.DeclarationContext list = (CobParser.DeclarationContext)ctx.getParent();
+		VariableSymbol varSym = new VariableSymbol(ctx.ID().getSymbol(),list.type().tipe);
+		varSym.setStatic(false);
+		currentScope.add(varSym);
+		CobParser.ExpressionContext e = ctx.expression();
+		if (e != null) {
 			visit(e);  // get reference scopes for initializations
 		}
 		return null;
 	}
-
+	
+	@Override public Void visitForDeclStatement(CobParser.ForDeclStatementContext ctx) {
+		enterScope(new LocalScope(ctx.start.getLine(),currentScope));
+        visitChildren(ctx);
+		leaveScope();
+		return null;
+	}
+	
     @Override public Void visitStringPrimary(CobParser.StringPrimaryContext ctx) {
     	//TODO assign a static struct to hold unique strings
         visitChildren(ctx);

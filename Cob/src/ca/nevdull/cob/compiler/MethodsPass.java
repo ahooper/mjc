@@ -24,8 +24,8 @@ public class MethodsPass extends PassCommon {
 				writeDefn("  struct ",base.getText(),"_Methods *_base;\n");
 			}
 		}
-		for (CobParser.MemberContext decl : ctx.member()) {
-			visit(decl);
+		for (CobParser.MemberContext member : ctx.member()) {
+			visit(member);
 		}
 		if (!staticPass) {
 			writeDefn("};\n");
@@ -34,6 +34,8 @@ public class MethodsPass extends PassCommon {
 			writeDefn("  struct ",name,"_Methods methods;\n");
 			writeDefn("};\n");
 			writeDefn("extern struct ",name,"_Class ",name,"_Class;\n");
+			writeDefn("extern void ",name,"_",PassCommon.CLASSINIT,"();\n");		
+			writeDefn("extern void ",name,"_",PassCommon.INSTANCEINIT,"(",name," this);\n");		
 		} else {
 			writeDefn("#endif /*",name,"_DEFN*/\n");
 		}
@@ -41,22 +43,39 @@ public class MethodsPass extends PassCommon {
 	}
 	
 	@Override public Void visitMethod(CobParser.MethodContext ctx) {
-		//	'static'? type ID '(' arguments? ')' '{' code '}'
+		//	'static'? type ID '(' arguments? ')' compoundStatement
 		if ((ctx.stat != null)^staticPass) return null;  // two visits, one processing virtual methods, then static
 		CobParser.KlassContext parent = (CobParser.KlassContext)ctx.getParent();
 		String className = parent.name.getText();
-		CobParser.TypeContext type = ctx.type();
-		String typeName = type.typeName().getText();
-		String array = "";
-		if (type.getChildCount() > 1) array = "*";
+		Type type = ctx.type().tipe;
 		TerminalNode id = ctx.ID();
 		String sep = "";
 		if (staticPass) {
-			writeDefn("extern ",typeName," ",array,className,"_",id.getText(),"(");
+			writeDefn("extern ",type.getNameString()," ",type.getArrayString(),className,"_",id.getText(),"(");
 		} else {
-			writeDefn("  ",typeName," (*",array,id.getText(),")(",className," this");
+			writeDefn("  ",type.getNameString()," (*",type.getArrayString(),id.getText(),")(",className," this");
 			sep = ",";
 		}
+		CobParser.ArgumentsContext arguments = ctx.arguments();
+		if (arguments != null) {
+			for (CobParser.ArgumentContext argument : arguments.argument()) {
+				writeDefn(sep);  sep = ",";
+				visit(argument);
+			}
+		}
+		writeDefn(");\n");
+		return null;
+	}
+	
+	@Override public Void visitConstructor(CobParser.ConstructorContext ctx) {
+		//	ID '(' arguments? ')' compoundStatement
+		if (!staticPass) return null;
+		CobParser.KlassContext parent = (CobParser.KlassContext)ctx.getParent();
+		String className = parent.name.getText();
+		TerminalNode id = ctx.ID();
+		assert id.getText().equals(className);
+		String sep = "";
+		writeDefn("extern void ",className,"_",id.getText(),"(");
 		CobParser.ArgumentsContext arguments = ctx.arguments();
 		if (arguments != null) {
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
@@ -73,13 +92,10 @@ public class MethodsPass extends PassCommon {
 		if (!staticPass) return null;
 		CobParser.KlassContext parent = (CobParser.KlassContext)ctx.getParent();
 		String className = parent.name.getText();
-		CobParser.TypeContext type = ctx.type();
-		String typeName = type.typeName().getText();
-		String array = "";
-		if (type.getChildCount() > 1) array = "*";
+		Type type = ctx.type().tipe;
 		TerminalNode id = ctx.ID();
 		String sep = "";
-		writeDefn("extern ",typeName," ",array,className,"_",id.getText(),"(");
+		writeDefn("extern ",type.getNameString()," ",type.getArrayString(),className,"_",id.getText(),"(");
 		CobParser.ArgumentsContext arguments = ctx.arguments();
 		if (arguments != null) {
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
@@ -92,27 +108,28 @@ public class MethodsPass extends PassCommon {
 	}
 	
 	@Override public Void visitArgument(CobParser.ArgumentContext ctx) {
-		CobParser.TypeContext type = ctx.type();
-		String typeName = type.typeName().getText();
-		String array = "";
-		if (type.getChildCount() > 1) array = "*";
-		writeDefn(typeName," ",array,ctx.ID().getText());
+		Type type = ctx.type().tipe;
+		writeDefn(type.getNameString()," ",type.getArrayString(),ctx.ID().getText());
+		return null;
+	}
+	
+	@Override public Void visitFieldList(CobParser.FieldListContext ctx) {
+		//	'static'? type ID ( '=' expression )? ( ',' ID ( '=' expression )? )* ';'
+		if (ctx.stat == null) return null;  // non-static fields have already been placed in the object instance
+		if (!staticPass) return null;  // not processing static fields on this visit
+		for (CobParser.FieldContext field : ctx.field()) {
+			visitField(field);
+		}
 		return null;
 	}
 	
 	@Override public Void visitField(CobParser.FieldContext ctx) {
-		//	'static'? type ID ( '=' code )? ( ',' ID ( '=' code )? )* ';'
-		if (ctx.stat == null) return null;  // non-static fields have already been placed in the object instance
-		if (!staticPass) return null;  // not processing static fields on this visit
-		CobParser.KlassContext parent = (CobParser.KlassContext)ctx.getParent();
+		//	ID ( '=' expression )?
+		CobParser.FieldListContext list = (CobParser.FieldListContext)ctx.getParent();
+		CobParser.KlassContext parent = (CobParser.KlassContext)list.getParent();
 		String className = parent.name.getText();
-		CobParser.TypeContext type = ctx.type();
-		String typeName = type.typeName().getText();
-		String array = "";
-		if (type.getChildCount() > 1) array = "*";
-		for (TerminalNode id : ctx.ID()) {
-			writeDefn(typeName," ",array,className,"_",id.getText(),";\n");
-		}
+		Type type = list.type().tipe;
+		writeDefn(type.getNameString()," ",type.getArrayString(),className,"_",ctx.ID().getText(),";\n");
 		return null;
 	}
 	

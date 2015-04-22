@@ -37,8 +37,8 @@ public class TablesPass extends PassCommon {
 		if (base != null) {
 			writeImpl("    ._base=&",base.getText(),"_Methods,\n");
 		}
-		for (CobParser.MemberContext decl : ctx.member()) {
-			visit(decl);
+		for (CobParser.MemberContext member : ctx.member()) {
+			visit(member);
 		}
 		writeImpl("  }\n");
 		writeImpl("};\n");
@@ -62,7 +62,7 @@ public class TablesPass extends PassCommon {
 	}
 	
 	@Override public Void visitMethod(CobParser.MethodContext ctx) {
-		//	'static'? type ID '(' arguments? ')' '{' code '}'
+		//	'static'? type ID '(' arguments? ')' compoundStatement
 		if (ctx.stat != null) return null;
 		CobParser.KlassContext parent = (CobParser.KlassContext)ctx.getParent();
 		String className = parent.name.getText();

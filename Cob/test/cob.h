@@ -14,16 +14,19 @@ typedef short int		cob_short;
 #define cob_true			(cob_boolean)1
 #define cob_false			(cob_boolean)0
 
-#define COB_CLASS_INIT(klass)
+#define COB_CLASS_INIT(klass) \
+	if (!klass##_Class.class.classInitialized) __INIT_ ##klass();
 #define COB_ENTER_METHOD(klass,methodStr)
 #define COB_EXIT_METHOD()
-#define COB_SOURCE_FILE(fileNameStr) static char *_sourceFile=fileNameStr;
+#define COB_SOURCE_FILE(fileNameStr) \
+	static char *_sourceFile=fileNameStr;
 #define COB_SOURCE_LINE(lineNum)
 
 typedef struct ClassTable *Class;
 
 struct ClassTable {
     int             classInitialized;
+    int				classInitializationBegan;
     const char*     className;
     const char*     packageName;
 //  const char*     enclosingClassName;
