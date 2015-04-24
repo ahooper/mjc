@@ -1,7 +1,11 @@
 grammar Cob;
 
 file
-	:	klass EOF
+	:	impourt* klass EOF
+	;
+
+impourt
+	:	'import' ID ';'
 	;
 
 klass																	locals [ ClassSymbol defn ]
@@ -9,8 +13,8 @@ klass																	locals [ ClassSymbol defn ]
 	;
 
 member																	locals [ Symbol defn ]
-	:	stat='static'? type ID '(' arguments? ')' compoundStatement		# method
-	|	ID '(' arguments? ')' compoundStatement							# constructor
+	:	stat='static'? type ID '(' arguments? ')' body					# method
+	|	ID '(' arguments? ')' body										# constructor
 	|	'native' type ID '(' arguments? ')' ';'							# nativeMethod
 	|	stat='static'? type field ( ',' field )* ';'					# fieldList
 	|	stat='static'? compoundStatement								# initializer
@@ -22,6 +26,11 @@ arguments
 	
 argument																locals [ Symbol defn ]
 	:	type ID
+	;
+
+body
+	:	compoundStatement
+	|	';'
 	;
 	
 type																	locals [ Type tipe ]	
@@ -55,6 +64,7 @@ primary																	locals [ Scope refScope, Type tipe ]
     |	'true'															# truePrimary
     |	'false'															# falsePrimary
     |   '(' sequence ')'												# parenPrimary
+    |   'new' ID '(' expressionList? ')'								# newPrimary
     |   primary '[' sequence ']'										# indexPrimary
     |   primary '(' expressionList? ')'									# callPrimary
     |   primary  '.' ID '(' expressionList? ')'							# invokePrimary
@@ -64,7 +74,7 @@ primary																	locals [ Scope refScope, Type tipe ]
     ;
 
 expressionList
-    :   assignment ( ',' assignment )?
+    :   assignment ( ',' assignment )*
     ;
 
 unary																	locals [ Type tipe ]
@@ -149,7 +159,7 @@ Reserved
 	:	'break' | 'case'  | 'continue' | 'default' | 'do' | 'else'								// Cob and C 
 	|	'for' | 'if' | 'return' | 'static' | 'switch' | 'while' 
 	|	'char' | 'double' | 'float' | 'int' | 'long' | 'short' | 'void'							// Cob and C types
-	| 	'boolean' | 'byte' | 'class' | 'false' | 'native' | 'null' | 'super' | 'this' | 'true'  // Cob only
+	| 	'boolean' | 'byte' | 'class' | 'false' | 'native' | 'new' | 'null' | 'super' | 'this' | 'true'  // Cob only
 	|	'const' | 'enum' | 'extern' | 'signed' | 'sizeof' | 'struct' | 'typedef' | 'unsigned'	// C only
 	;
 

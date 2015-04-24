@@ -2,51 +2,179 @@ package ca.nevdull.cob.compiler;
 
 // Collect the class scope and symbol type structure, and attach it to the parse tree
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+import org.antlr.v4.runtime.ANTLRInputStream;
+import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 public class DefinitionPass extends PassCommon {
 	Scope currentScope;
-
+	private boolean trace;
+/*
+    static String preloadClasses[] = {
+		"Object",
+		"Class",
+		//"String",
+		//"Integer",
+		//"System",
+		};
+*/
+	
 	public DefinitionPass(PassData data) {
 		super(data);
+    	trace = passData.main.trace.contains("DefinitionPass");
 		BaseScope globals = new BaseScope("globals",null);
 		data.globals = globals;
-		enterScope(globals);
+		currentScope = globals;
+	/*
+		if (!passData.main.no_base) {
+			List<String> nameComponents = new ArrayList<String>();
+			for (String className : preloadClasses) {
+				nameComponents.clear();
+				nameComponents.add(className);
+				importClass(nameComponents, passData.main.bootClassPath);
+			}
+		}
+	*/
 	}
     
-    private void enterScope(Scope newScope) {
-    	Main.debug("enter %s enclosing=%s", newScope, newScope.getEnclosingScope());
+    private void beginScope(Scope newScope) {
+    	if (trace) Main.debug("begin %s enclosing=%s", newScope, newScope.getEnclosingScope());
 	    currentScope = newScope;
     }
     
-    private void leaveScope() {
-    	Main.debug("leave %s", currentScope);
+    private void endScope() {
+    	if (trace) Main.debug("end %s", currentScope);
 	    currentScope = currentScope.getEnclosingScope();
     }
+
+	private ClassSymbol importClass(List<TerminalNode> nameComponents, String[] classPath, boolean optional) {
+		// Read saved symbols
+		StringBuilder qname = new StringBuilder();
+		TerminalNode lastName = null;
+    	for (TerminalNode nameComponent : nameComponents) {
+    		if (qname.length() > 0) qname.append(File.separatorChar);
+    		qname.append(nameComponent.getText());
+    		lastName = nameComponent;
+    	}
+    	String qnameString = qname.toString();
+    	Symbol prev = passData.globals.find(qnameString);
+		if (prev != null) {
+			if (prev instanceof ClassSymbol) {
+				if (trace) Main.debug("previously imported "+qnameString);
+	    		return (ClassSymbol) prev;
+			} else {
+				Main.error(lastName,"import conflicts with "+prev);
+				return null;
+			}
+    	}
+		ClassSymbol klass;
+        try {
+        	for (String pathDir : classPath) {
+            	File fname;
+				if (pathDir == null || pathDir.length() == 0) {
+        			if (passData.outputDir == null) fname = new File(qnameString+Main.IMPORT_SUFFIX);
+        			else fname = new File(passData.outputDir,qnameString+Main.IMPORT_SUFFIX);
+        		} else fname = new File(pathDir,qnameString+Main.IMPORT_SUFFIX);
+            	if (! fname.isFile() ) continue; // try next in path
+            	if (trace) Main.debug("import found "+fname.getAbsolutePath());
+                klass = compileImport(fname);
+                return klass;
+        	}
+		} catch (IOException excp) {
+			Main.error("Unable to read import "+excp.toString());
+			excp.printStackTrace();
+		}
+		if (optional) return null;
+		Main.error("Class not found "+qname+" (path "+Arrays.toString(classPath)+")");        	
+		klass = UnknownType.make(lastName.getSymbol());
+        passData.globals.add(klass);
+		return klass; 
+	}
+	
+	private ClassSymbol autoImport(TerminalNode ident) {
+    	List<TerminalNode> nameComponents = new ArrayList<TerminalNode>();
+    	nameComponents.add(ident);
+    	ClassSymbol klass = importClass(nameComponents, passData.main.classPath, true/*optional*/);
+    	if (klass == null) klass = importClass(nameComponents, passData.main.bootClassPath, false/*optional*/);
+    	klass.setAutoImport(true);
+		return klass;
+	}
+    
+	private ClassSymbol compileImport(File inFile) throws FileNotFoundException, IOException {
+		ANTLRInputStream input = new ANTLRInputStream(new InputStreamReader(new FileInputStream(inFile),"UTF-8"));
+		input.name = inFile.getName();
+        CobLexer lexer = new CobLexer(input);
+        CommonTokenStream tokens = new CommonTokenStream(lexer);
+        CobParser parser = new CobParser(tokens);
+        parser.removeErrorListeners(); // remove ConsoleErrorListener
+        parser.addErrorListener(new Main.VerboseListener()); // add ours
+        parser.setBuildParseTree(true);
+        ParseTree tree = parser.file();
+        Scope saveScope = currentScope;
+        currentScope = passData.globals;
+        this.visit(tree);
+        currentScope = saveScope;
+        return ((CobParser.FileContext)tree).klass().defn;
+	}
+
+	@Override public Void visitFile(CobParser.FileContext ctx) {
+		visitChildren(ctx);
+    	if (trace) Main.debug("globals %s", passData.globals);		
+		return null;
+	}
+
+	@Override public Void visitImpourt(CobParser.ImpourtContext ctx) {
+    	TerminalNode ident = ctx.ID();
+    	List<TerminalNode> nameComponents = new ArrayList<TerminalNode>();
+    	nameComponents.add(ident);
+		importClass(nameComponents, passData.main.classPath, false/*optional*/);    	
+		return null;
+	}
 
 	@Override public Void visitKlass(CobParser.KlassContext ctx) {
 		Token nameToken = ctx.name;
 		Token baseToken = ctx.base;
 		ClassSymbol baseClass = null;
-		if (baseToken == null) {
-			baseClass = null;
-		} else {
-			String baseName = baseToken.getText();
-			Symbol baseSymbol = currentScope.find(baseName);
-			if (baseSymbol == null) Main.error(baseToken,baseName+" is not defined");
-			else if (baseSymbol instanceof ClassSymbol) baseClass = (ClassSymbol)baseSymbol;
-			else Main.error(baseToken,baseName+" is not a class");
-		}
 		ClassSymbol thisClass = new ClassSymbol(nameToken, currentScope, baseClass);
 		thisClass.setType(thisClass);
 		ctx.defn = thisClass;
 		currentScope.add(thisClass);
-		enterScope(thisClass);
+		if (baseToken != null) {
+			// Base is imported only after the subject class is defined, so the subject's
+			// name is known during import of the base
+			String baseName = baseToken.getText();
+			Symbol baseSymbol = currentScope.find(baseName);
+			if (baseSymbol == null) {
+				ClassSymbol imp = autoImport(ctx.ID(1));
+				if (imp != null) {
+					baseClass = imp;
+				} else {
+					Main.error(baseToken,"Base "+baseName+" is not defined");
+					baseClass = UnknownType.make(baseToken);
+				}
+			} else if (baseSymbol instanceof ClassSymbol) {
+				baseClass = (ClassSymbol)baseSymbol;
+			} else {
+				Main.error(baseToken,"Base "+baseName+" is not a class");
+			}
+		}
+		thisClass.setBase(baseClass);
+		beginScope(thisClass);
 		for (CobParser.MemberContext member : ctx.member()) {
 			visit(member);
 		}
-		leaveScope();
+		endScope();
 		return null;
 	}
 	
@@ -59,15 +187,15 @@ public class DefinitionPass extends PassCommon {
 		methSym.setStatic(ctx.stat != null);
 		ctx.defn = methSym;
 		currentScope.add(methSym);
-		enterScope(methSym);
+		beginScope(methSym);
 		CobParser.ArgumentsContext arguments = ctx.arguments();
 		if (arguments != null) {
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
 				visit(argument);
 			}
 		}
-		visitCompoundStatement(ctx.compoundStatement());
-		leaveScope();
+		visitBody(ctx.body());
+		endScope();
 		return null;
 	}
 	
@@ -82,16 +210,17 @@ public class DefinitionPass extends PassCommon {
 		}
 		MethodSymbol methSym = new MethodSymbol(id.getSymbol(),currentScope,PrimitiveType.voidType);
 		methSym.setStatic(true);
+		ctx.defn = methSym;
 		currentScope.add(methSym);
-		enterScope(methSym);
+		beginScope(methSym);
 		CobParser.ArgumentsContext arguments = ctx.arguments();
 		if (arguments != null) {
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
 				visit(argument);
 			}
 		}
-		visitCompoundStatement(ctx.compoundStatement());
-		leaveScope();
+		visitBody(ctx.body());
+		endScope();
 		return null;
 	}
 	
@@ -103,14 +232,14 @@ public class DefinitionPass extends PassCommon {
 		MethodSymbol methSym = new MethodSymbol(id.getSymbol(),currentScope,typeCtx.tipe);
 		methSym.setNative(true);
 		currentScope.add(methSym);
-		enterScope(methSym);
+		beginScope(methSym);
 		CobParser.ArgumentsContext arguments = ctx.arguments();
 		if (arguments != null) {
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
 				visit(argument);
 			}
 		}
-		leaveScope();
+		endScope();
 		return null;
 	}
 	
@@ -165,36 +294,47 @@ public class DefinitionPass extends PassCommon {
 	
 	@Override public Void visitTypeName(CobParser.TypeNameContext ctx) {
 		ctx.refScope = currentScope;
-		//TODO following should be in a later pass
 		TerminalNode id = ctx.ID();
 		if (id == null) {
 			ctx.tipe = PrimitiveType.getByName(ctx.start.getText());
 			assert ctx.tipe != null;
 		} else {
-			Symbol defn = currentScope.find(id.getText());
+			String name = id.getText();
+			Symbol defn = currentScope.find(name);
 			if (defn == null) {
-				Main.error(id,id.getText()+" is not defined");
-				ctx.tipe = UnknownType.instance;
+				ClassSymbol imp = autoImport(id);
+				if (imp != null) {
+					ctx.tipe = imp;
+				} else {
+					Main.error(id,"Class "+name+" is not defined");
+					ctx.tipe = UnknownType.make(id.getSymbol());
+				}
 			} else if (defn instanceof ClassSymbol){
 				ctx.tipe = (ClassSymbol)defn;
 			} else {
-				Main.error(id,id.getText()+" is not a type");
+				Main.error(id,name+" is not a type");
 			}
 		}
 		return null;
 	}
 	
+	@Override public Void visitBody(CobParser.BodyContext ctx) {
+		CobParser.CompoundStatementContext cs = ctx.compoundStatement();
+		if (cs != null) visitCompoundStatement(cs);
+		return null;
+	}
+
 	@Override public Void visitNamePrimary(CobParser.NamePrimaryContext ctx) {
 		ctx.refScope = currentScope;
 		return null;
 	}
 	
 	@Override public Void visitCompoundStatement(CobParser.CompoundStatementContext ctx) {
-		enterScope(new LocalScope(ctx.start.getLine(),currentScope));
+		beginScope(new LocalScope(ctx.start.getLine(),currentScope));
 		for (CobParser.BlockItemContext item : ctx.blockItem()) {
 			visitBlockItem(item);
 		}
-		leaveScope();
+		endScope();
 		return null;
 	}
 	
@@ -222,9 +362,9 @@ public class DefinitionPass extends PassCommon {
 	}
 	
 	@Override public Void visitForDeclStatement(CobParser.ForDeclStatementContext ctx) {
-		enterScope(new LocalScope(ctx.start.getLine(),currentScope));
+		beginScope(new LocalScope(ctx.start.getLine(),currentScope));
         visitChildren(ctx);
-		leaveScope();
+		endScope();
 		return null;
 	}
 	

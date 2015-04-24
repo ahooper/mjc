@@ -10,6 +10,7 @@ import org.antlr.v4.runtime.Token;
 public class ClassSymbol extends ScopingSymbol implements Type {
 	
 	ClassSymbol base;
+	private boolean isAutoImport;
 
 	public ClassSymbol(Token id, Scope enclosingScope, ClassSymbol base) {
 		super(id, enclosingScope, null);
@@ -19,6 +20,10 @@ public class ClassSymbol extends ScopingSymbol implements Type {
 	
 	public ClassSymbol getBase() {
 		return base;
+	}
+
+	public void setBase(ClassSymbol base) {
+		this.base = base;
 	}
 
 	public Symbol findMember(String name) {
@@ -61,5 +66,13 @@ public class ClassSymbol extends ScopingSymbol implements Type {
 	@Override
 	public String getArrayString() {
 		return "";
+	}
+
+	public boolean getAutoImport() {
+		return this.isAutoImport;	
+	}
+
+	public void setAutoImport(boolean autoImport) {
+		this.isAutoImport = autoImport;	
 	}
 }

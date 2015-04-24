@@ -9,9 +9,11 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 
 public class CodePass extends PassCommon {
 	ArrayDeque<String> klassNest = new ArrayDeque<String>();
+	private boolean trace;
 	
 	public CodePass(PassData data) {
 		super(data);
+    	trace = passData.main.trace.contains("CodePass");
 	}
 
 	@Override public Void visitFile(CobParser.FileContext ctx) {
@@ -45,15 +47,15 @@ public class CodePass extends PassCommon {
 		doInitializers(ctx, name, false);
 		doInitializers(ctx, name, true);
 		writeImpl("void ",PassCommon.INIT,"_",name,"() {\n");
-		writeImpl("//LATER lock if multi-threads\n");
-		writeImpl("int initBegan = ",name,"_Class.classInitializationBegan;\n");
-		writeImpl("// Whether or not class initialization had already began, it has begun now\n");
-		writeImpl(name,"_Class.classInitializationBegan = 1;\n");
+		writeImpl(" //LATER lock if multi-threads\n");
+		writeImpl(" int initBegan = ",name,"_ClassInfo.class.classInitializationBegan;\n");
+		writeImpl(" // Whether or not class initialization had already began, it has begun now\n");
+		writeImpl(" ",name,"_ClassInfo.class.classInitializationBegan = 1;\n");
 		if (ctx.base != null) {
 			//TODO call base initialization
 		}
-		//TODO
-		writeImpl(name,"_Class.classInitialized = 1;\n");
+		writeImpl(" ",name,"__classinit_();\n");
+		writeImpl(" ",name,"_ClassInfo.class.classInitialized = 1;\n");
 		writeImpl("}\n");
 		klassNest.removeLast();
 		return null;
@@ -66,6 +68,7 @@ public class CodePass extends PassCommon {
 		writeImpl(") {\n");
 		writeImpl(" COB_ENTER_METHOD(",name,",\"",method,"\")\n");
 		writeImpl(" COB_SOURCE_FILE(\"",passData.sourceFileName,"\")\n");
+		if (statics) writeImpl(" COB_CLASS_INIT(",klassNest.getLast(),")\n");
 		for (CobParser.MemberContext member : ctx.member()) {
 			if (member instanceof CobParser.InitializerContext) {
 				CobParser.InitializerContext init = (CobParser.InitializerContext)member;
@@ -110,7 +113,7 @@ public class CodePass extends PassCommon {
 			}
 		}
 		writeImpl(")");
-		visit(ctx.compoundStatement());
+		visitBody(ctx.body());
 		writeImpl("\n");
 		return null;
 	}
@@ -129,8 +132,19 @@ public class CodePass extends PassCommon {
 			}
 		}
 		writeImpl(")");
-		visit(ctx.compoundStatement());
+		visitBody(ctx.body());
 		writeImpl("\n");
+		return null;
+	}
+	
+	@Override public Void visitNativeMethod(CobParser.NativeMethodContext ctx) {
+		//	'native' type ID '(' arguments? ')' ';'
+		// produces nothing
+		return null;
+	}
+	
+	@Override public Void visitInitializer(CobParser.InitializerContext ctx) {
+		assert false;  // visited in doInitializers
 		return null;
 	}
 	
@@ -149,6 +163,12 @@ public class CodePass extends PassCommon {
 		writeImpl(type.getNameString()," ",type.getArrayString(),ctx.ID().getText());
 		return null;
 	}
+	
+	@Override public Void visitBody(CobParser.BodyContext ctx) {
+		CobParser.CompoundStatementContext cs = ctx.compoundStatement();
+		if (cs != null) visitCompoundStatement(cs);
+		return null;
+	}
 
     @Override public Void visitNamePrimary(CobParser.NamePrimaryContext ctx) {
     	String id = ctx.ID().getText();
@@ -159,7 +179,7 @@ public class CodePass extends PassCommon {
     	}
     	ctx.tipe = sym.type;
     	Scope scope = sym.getScope();
-    	Main.debug("%s%s scope=%s", sym, (sym.isStatic())?" static":"", scope);
+    	if (trace) Main.debug("%s%s scope=%s", sym, (sym.isStatic())?" static":"", scope);
     	if (sym instanceof ClassSymbol) {
 			writeImpl(id);    		    		
     	} else if (sym instanceof MethodSymbol) {
@@ -167,7 +187,7 @@ public class CodePass extends PassCommon {
     			assert scope instanceof ClassSymbol;
     			writeImpl(((ClassSymbol)scope).getName(),"_",id);    		
     		} else {
-    			writeImpl("(*(this->class.methods.",id,"))");
+    			writeImpl("(*(this->class->methods.",id,"))");
     		}
     	} else if (sym instanceof VariableSymbol) {
     		if (sym.isStatic()) {
@@ -227,6 +247,16 @@ public class CodePass extends PassCommon {
         return null;
     }
 
+    @Override public Void visitNewPrimary(CobParser.NewPrimaryContext ctx) {
+    	writeImpl(ctx.ID().getText(),"_new","(");
+    	CobParser.ExpressionListContext args = ctx.expressionList();
+    	if (args != null) {
+    		visit(args);
+    	}
+		writeImpl(")");
+        return null;
+    }
+
     @Override public Void visitIndexPrimary(CobParser.IndexPrimaryContext ctx) {
         visitChildren(ctx);
         return null;
@@ -246,7 +276,6 @@ public class CodePass extends PassCommon {
     		visit(args);
     	}
 		writeImpl(")");
-        visitChildren(ctx);
         return null;
     }
 
@@ -413,7 +442,7 @@ public class CodePass extends PassCommon {
 			visitVariable(var);
 			sep = ",";
 		}
-        writeImpl(";\n");
+        writeImpl(";");
         return null;
     }
 

@@ -12,14 +12,17 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 
 public class TablesPass extends PassCommon {
 	
+	private boolean trace;
+
 	public TablesPass(PassData data) {
 		super(data);
+    	trace = passData.main.trace.contains("TablesPass");
 	}
 
 	@Override public Void visitKlass(CobParser.KlassContext ctx) {
 		String name = ctx.name.getText();
 		Token base = ctx.base;
-		writeImpl("struct ",name,"_Class ",name,"_Class={\n");
+		writeImpl("struct ",name,"_ClassInfo ",name,"_ClassInfo={\n");
 		writeImpl("  .class={\n");
 		writeImpl("    .classInitialized=0,\n");
 		writeImpl("    .className=\"",name,"\",\n");
@@ -27,7 +30,7 @@ public class TablesPass extends PassCommon {
 		writeImpl("  //.enclosingClassName=\n");
 		writeImpl("  //.enclosingMethodName=\n");
 		if (base != null) {
-			writeImpl("    .baseType=&",base.getText(),"_Class,\n");
+			writeImpl("    .baseType=&",base.getText(),"_ClassInfo,\n");
 		} else {
 			writeImpl("    .baseType=0,\n");
 		}
@@ -45,16 +48,21 @@ public class TablesPass extends PassCommon {
 		// Save symbols for import
         try {
 			ClassSymbol klass = ctx.defn;
-			PrintWriter impWriter = passData.openFileWriter(klass.getName(),Main.IMPORT_SUFFIX);
-			impWriter.append("// Generated at ").append(passData.timeStamp).append("\n");
-			impWriter.append("// From ").append(passData.sourceFileName).append("\n");
-			for (Entry<String, Symbol> globEnt : passData.globals.getMembers().entrySet()) {
-				Symbol globSym = globEnt.getValue();
-				if (globSym == klass) continue;
-				impWriter.append("import ").append(globSym.getName()).append(";\n");
+			if (klass.getAutoImport()) {
+				
+			} else {
+				PrintWriter impWriter = passData.openFileWriter(klass.getName(),Main.IMPORT_SUFFIX);
+				impWriter.append("// Generated at ").append(passData.timeStamp).append("\n");
+				impWriter.append("// From ").append(passData.sourceFileName).append("\n");
+				for (Entry<String, Symbol> globEnt : passData.globals.getMembers().entrySet()) {
+					Symbol globSym = globEnt.getValue();
+					if (globSym == klass) continue;
+					if (globSym instanceof ClassSymbol && ((ClassSymbol)globSym).getAutoImport()) continue;
+					impWriter.append("import ").append(globSym.getName()).append(";\n");
+				}
+		        klass.writeImport(impWriter);
+		        impWriter.close();
 			}
-	        klass.writeImport(impWriter);
-	        impWriter.close();
 		} catch (IOException excp) {
 			Main.error("Unable to write import symbols "+excp.getMessage());
 		}

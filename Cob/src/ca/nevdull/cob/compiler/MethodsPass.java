@@ -8,9 +8,11 @@ import org.antlr.v4.runtime.tree.TerminalNode;
 public class MethodsPass extends PassCommon {
 	
 	boolean staticPass;
+	private boolean trace;
 	
 	public MethodsPass(PassData data, boolean staticPass) {
 		super(data);
+    	trace = passData.main.trace.contains("MethodsPass");
 		this.staticPass = staticPass;
 		//NB staticPass must follow non-static
 	}
@@ -29,11 +31,11 @@ public class MethodsPass extends PassCommon {
 		}
 		if (!staticPass) {
 			writeDefn("};\n");
-			writeDefn("struct ",name,"_Class {\n");
+			writeDefn("struct ",name,"_ClassInfo {\n");
 			writeDefn("  struct ClassTable class;\n");
 			writeDefn("  struct ",name,"_Methods methods;\n");
 			writeDefn("};\n");
-			writeDefn("extern struct ",name,"_Class ",name,"_Class;\n");
+			writeDefn("extern struct ",name,"_ClassInfo ",name,"_ClassInfo;\n");
 			writeDefn("extern void ",name,"_",PassCommon.CLASSINIT,"();\n");		
 			writeDefn("extern void ",name,"_",PassCommon.INSTANCEINIT,"(",name," this);\n");		
 		} else {

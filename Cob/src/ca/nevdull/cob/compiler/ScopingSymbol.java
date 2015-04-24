@@ -42,12 +42,15 @@ public class ScopingSymbol extends Symbol implements Scope {
 			Token token = symbol.getToken();
 			if (token != null) {
 				Main.error(token,name+" previously defined in "+getName());
+				Main.debug("Previous %s",s);
 			} else {
 				Main.error(name+" previously defined in "+getName());
+				Main.debug("Previous %s",s);
 			}
         	// TODO mark symbol as duplicate definition
 			return;
 		};
+		//Main.debug("%s add %s", this.getName(), symbol);
 		members.put(name, symbol);
 		symbol.setScope(this);
 	}

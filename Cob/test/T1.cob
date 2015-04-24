@@ -1,4 +1,4 @@
-class T1 : Base {
+class T1 : Object {
     char[] content;
     int offset, length;
     static int serial=5;
@@ -12,6 +12,6 @@ class T1 : Base {
     }
     static T1 copy(T1 model) {
         int x = serial+1;
-    	return T1.new();
+    	return new T1();
     }
 }

@@ -25,13 +25,19 @@ import java.util.regex.Pattern;
 
 public class Main {
 
-	///// Compilation options
+	///// Key file name elements
 	
 	public static final String PATH_SEPARATOR = ":"; 
 			// could use File.pathSeparator, but prefer a platform-independent separator
 
+    public static final String IMPORT_SUFFIX = ".import";
+    public static final String DEFN_SUFFIX = ".h";
+    public static final String IMPL_SUFFIX = ".c";
+
+	///// Compilation options
+
 	public static final String BOOT_CLASS_PATH_OPTION = "-B";
-	public static final String[] defaultBootClassPath = {"/Users/andy/Software/git/mjc/mjc/src/ca/nevdull/cob/lib"};
+	public static final String[] defaultBootClassPath = {"/Users/andy/Software/git/mjc/cob/src/ca/nevdull/cob/lib/c"};
 	String[] bootClassPath = defaultBootClassPath;
 	
 	public static final String CLASS_PATH_OPTION = "-L";
@@ -45,10 +51,9 @@ public class Main {
 	public static final String TRACE_OPTION = "-t";
 	HashSet<String> trace = new HashSet<String>();
 
-    public static final String IMPORT_SUFFIX = ".import";
-    public static final String DEFN_SUFFIX = ".h";
-    public static final String IMPL_SUFFIX = ".c";
-
+    public static final String NO_BASE_OPTION = "-nobase";
+    boolean no_base = false;
+    
     ///// Error
     
     static int errorCount = 0;
@@ -87,6 +92,8 @@ public class Main {
 			outputDirectory = argIter.next();
 		} else if (arg.equals(TRACE_OPTION) && argIter.hasNext()) {
 			trace.add(argIter.next());
+		} else if (arg.equals(NO_BASE_OPTION)) {
+			no_base = true;
 		} else {
 			error("Unrecognized option "+arg);
 		}
@@ -108,10 +115,14 @@ public class Main {
     }
 	
     public static void error(Token t, String text, String caller) {
+    	String source = t.getInputStream().getSourceName();
+    	if (!source.isEmpty()) { System.err.print(source); System.err.print(" "); }
         errprintf("Line %d@%d at %s: %s - %s\n", t.getLine(), t.getCharPositionInLine()+1, t.getText(), text, caller);
     }
 
 	public static void error(Token t, String text) {
+    	String source = t.getInputStream().getSourceName();
+    	if (!source.isEmpty()) { System.err.print(source); System.err.print(" "); }
         error(t.getLine(), t.getCharPositionInLine()+1, t.getText(), text);
     }
 
@@ -151,6 +162,8 @@ public class Main {
 	                            int line, int charPositionInLine,
 	                            String msg,
 	                            RecognitionException e) {
+	    	String source = recognizer.getInputStream().getSourceName();
+	    	if (!source.isEmpty()) { System.err.print(source); System.err.print(" "); }
 	        error(line,charPositionInLine+1,offendingSymbol.toString(),msg);
 	        List<String> stack = ((Parser)recognizer).getRuleInvocationStack();
 	        Collections.reverse(stack);
@@ -177,11 +190,13 @@ public class Main {
 			passData.outputDir = ".";
 			if (arg == null) {
 				input = new ANTLRInputStream(System.in);
+				input.name = "STDIN";
 				unitName = "anonymous";
 				passData.sourceFileName = "STDIN";
 			} else {
 				File inFile = new File(arg);
 				input = new ANTLRInputStream(new InputStreamReader(new FileInputStream(inFile),"UTF-8"));
+				input.name = arg;
 				int x = arg.lastIndexOf(File.separatorChar);
 				if (x >= 0) {
 					unitName = arg.substring(x+1);
@@ -207,6 +222,7 @@ public class Main {
 	        parser.removeErrorListeners(); // remove ConsoleErrorListener
 	        parser.addErrorListener(new VerboseListener()); // add ours
 	        parser.setBuildParseTree(true);
+	        if (trace.contains("Parser")) parser.setTrace(true);
 	        ParseTree tree = parser.file();
 	        passData.parser = parser; // to produce meaningful tree node labels
 
@@ -215,7 +231,7 @@ public class Main {
 	        // Collect the class scope and symbol type structure, and attach it to the parse tree
 	        DefinitionPass definitionPass = new DefinitionPass(passData);
 	        definitionPass.visit(tree);
-	        System.out.println(DIVIDER);
+	        //System.out.println(DIVIDER);
  	        // Produce the class instance structure (object fields) to the class definition file
 	        ObjectPass objectPass = new ObjectPass(passData);
 	        objectPass.visit(tree);
