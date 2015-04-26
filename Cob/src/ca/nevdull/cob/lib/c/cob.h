@@ -22,7 +22,7 @@ typedef short int		cob_short;
 	static char *_sourceFile=fileNameStr;
 #define COB_SOURCE_LINE(lineNum)
 
-typedef struct Class_ClassInfo *Class;
+struct Class_Object;
 
 struct ClassTable {
     int             classInitialized;
@@ -31,8 +31,9 @@ struct ClassTable {
     const char*     packageName;
 //  const char*     enclosingClassName;
 //  const char*     enclosingMethodName;
-    Class		    baseType;
-    Class       	arrayType;
+    struct Class_Object	*classClass;
+    struct Class_Object	*baseClass;
+    struct Class_Object *arrayClass;
 };
 
 #endif /*COB_DEFN*/
