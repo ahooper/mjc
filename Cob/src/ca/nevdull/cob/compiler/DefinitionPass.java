@@ -183,9 +183,23 @@ public class DefinitionPass extends PassCommon {
 		CobParser.TypeContext typeCtx = ctx.type();
 		visitType(typeCtx);
 		TerminalNode id = ctx.ID();
-		MethodSymbol methSym = new MethodSymbol(id.getSymbol(),currentScope,typeCtx.tipe);
+		Token symbol = id.getSymbol();
+		MethodSymbol methSym = new MethodSymbol(symbol,currentScope,typeCtx.tipe);
 		methSym.setStatic(ctx.stat != null);
 		ctx.defn = methSym;
+		assert currentScope instanceof ClassSymbol;
+		ClassSymbol klass = (ClassSymbol)currentScope;
+		Symbol prev = klass.findMember(symbol.getText());
+		if (prev != null) {
+			if (prev.getScope() == klass) {
+				// overloading or duplicate
+				Main.error(symbol, "overloading is not yet implemented");
+			} else if (prev instanceof MethodSymbol) {
+				methSym.setOverrides((MethodSymbol)prev);
+			} else {
+				Main.error(symbol, "override kind mismatch");
+			}
+		}
 		currentScope.add(methSym);
 		beginScope(methSym);
 		CobParser.ArgumentsContext arguments = ctx.arguments();

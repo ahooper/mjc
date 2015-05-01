@@ -10,17 +10,18 @@ import java.util.Map.Entry;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
-public class TablesPass extends PassCommon {
+public class NewTablesPass extends PassCommon {
 	
 	private boolean trace;
 
-	public TablesPass(PassData data) {
+	public NewTablesPass(PassData data) {
 		super(data);
     	trace = passData.main.trace.contains("TablesPass");
 	}
 
 	@Override public Void visitKlass(CobParser.KlassContext ctx) {
 		String name = ctx.name.getText();
+		ClassSymbol klass = ctx.defn;
 		Token base = ctx.base;
 		writeImpl("struct ",name,"_Dispatch ",name,"_Dispatch={\n");
 		writeImpl("  .init={\n");
@@ -47,7 +48,6 @@ public class TablesPass extends PassCommon {
 		writeImpl("};\n");
 		// Save symbols for import
         try {
-			ClassSymbol klass = ctx.defn;
 			if (klass.getAutoImport()) {
 				
 			} else {

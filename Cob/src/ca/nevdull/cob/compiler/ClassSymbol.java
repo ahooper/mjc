@@ -3,6 +3,8 @@ package ca.nevdull.cob.compiler;
 // Representation of a named class type
 
 import java.io.PrintWriter;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Map.Entry;
 
 import org.antlr.v4.runtime.Token;
@@ -11,6 +13,7 @@ public class ClassSymbol extends ScopingSymbol implements Type {
 	
 	ClassSymbol base;
 	private boolean isAutoImport;
+	LinkedHashMap<String,Symbol> expanded_members = null;
 
 	public ClassSymbol(Token id, Scope enclosingScope, ClassSymbol base) {
 		super(id, enclosingScope, null);
@@ -74,5 +77,23 @@ public class ClassSymbol extends ScopingSymbol implements Type {
 
 	public void setAutoImport(boolean autoImport) {
 		this.isAutoImport = autoImport;	
+	}
+	
+	public void computeExpandedMembers() {
+		if (expanded_members != null) return;  // previously computed
+		if (base != null) {
+			base.computeExpandedMembers();
+			expanded_members = new LinkedHashMap<String,Symbol>(base.expanded_members);
+		} else {
+			expanded_members = new LinkedHashMap<String,Symbol>();
+		}
+		for (Entry<String, Symbol> ent : members.entrySet()) {
+			expanded_members.put(ent.getKey(), ent.getValue());
+		}
+	}
+
+	public Map<String, Symbol> getExpandedMembers() {
+		computeExpandedMembers();
+		return expanded_members;
 	}
 }

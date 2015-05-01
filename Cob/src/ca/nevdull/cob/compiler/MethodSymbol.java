@@ -10,6 +10,9 @@ import org.antlr.v4.runtime.Token;
 public class MethodSymbol extends ScopingSymbol {
 	
 	boolean isNative;
+	private MethodSymbol hides;
+	private MethodSymbol overrides;
+	private MethodSymbol overloads;
 
 	public MethodSymbol(Token id, Scope enclosingScope, Type type) {
 		super(id, enclosingScope, type);
@@ -38,4 +41,28 @@ public class MethodSymbol extends ScopingSymbol {
 		}
 		pw.append(")");
     }
+
+	public void setHides(MethodSymbol hides) {
+		this.hides = hides;
+	}
+
+	public MethodSymbol getHides() {
+		return hides;
+	}
+
+	public void setOverrides(MethodSymbol overrides) {
+		this.overrides = overrides;
+	}
+
+	public MethodSymbol getOverrides() {
+		return overrides;
+	}
+
+	public MethodSymbol getOverloads() {
+		return overloads;
+	}
+
+	public void setOverloads(MethodSymbol overloads) {
+		this.overloads = overloads;
+	}
 }

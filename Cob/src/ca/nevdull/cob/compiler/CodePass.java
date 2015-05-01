@@ -3,7 +3,10 @@ package ca.nevdull.cob.compiler;
 // Produce the target language code to the class implementation file 
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayDeque;
+import java.util.Map.Entry;
 
 import org.antlr.v4.runtime.tree.TerminalNode;
 
@@ -22,42 +25,109 @@ public class CodePass extends PassCommon {
 	}
 
 	@Override public Void visitKlass(CobParser.KlassContext ctx) {
-		String name = ctx.name.getText();
-		klassNest.addLast(name);
+		String className = ctx.name.getText();
+		klassNest.addLast(className);
 		try {
-			passData.implStream = passData.openFileStream(name, Main.IMPL_SUFFIX);
+			passData.implStream = passData.openFileStream(className, Main.IMPL_SUFFIX);
 		} catch (FileNotFoundException excp) {
 			Main.error("Unable to open implementations stream "+excp.getMessage());
 		}
 		writeImpl("// Generated at ",passData.timeStamp,"\n");
 		writeImpl("// From ",passData.sourceFileName,"\n");
-		writeImpl("#include \"",name,Main.DEFN_SUFFIX,"\"\n");
+		writeImpl("#include \"",className,Main.DEFN_SUFFIX,"\"\n");
 		for (CobParser.MemberContext member : ctx.member()) {
 			visit(member);
 		}
-		if (ctx.defn.findMember(name) == null) {
+		
+		ClassSymbol defn = ctx.defn;
+		ClassSymbol base = defn.getBase();
+		String baseName = (base != null) ? base.getName() : null;
+		if (defn.findMember(className) == null) {
+			//TODO this should go in DefinitionsPass, and define an actual constructor node
 			// define a default constructor
-			writeImpl("void ",name,"_",name,"() {\n");
-			ClassSymbol base = ctx.defn.getBase();
+			writeImpl("void ",className,"_",className,"() {\n");
 			if (base != null) {
-				writeImpl(" ",base.getName(),"();\n");
+				writeImpl(" ",baseName,"_",baseName,"();\n");
 			}
 			writeImpl("}\n");
 		}
-		doInitializers(ctx, name, false);
-		doInitializers(ctx, name, true);
-		writeImpl("void ",PassCommon.INIT,"_",name,"() {\n");
-		writeImpl(" //LATER lock if multi-threads\n");
-		writeImpl(" int initBegan = ",name,"_ClassInfo.class.classInitializationBegan;\n");
-		writeImpl(" // Whether or not class initialization had already began, it has begun now\n");
-		writeImpl(" ",name,"_ClassInfo.class.classInitializationBegan = 1;\n");
-		if (ctx.base != null) {
-			//TODO call base initialization
+		doInitializers(ctx, className, false);
+		doInitializers(ctx, className, true);
+		
+		// Define the Dispatch structure
+		
+		writeImpl("struct ",className,"_Dispatch ",className,"_Dispatch={\n");
+		writeImpl("  .init={\n");
+		writeImpl("    .classInitialized=0,\n");
+		writeImpl("    .className=\"",className,"\",\n");
+		writeImpl("  //.packageName=\n");
+		writeImpl("  //.enclosingClassName=\n");
+		writeImpl("  //.enclosingMethodName=\n");
+		writeImpl("    .instanceSize=sizeof(struct ",className,"_Object),\n");
+		writeImpl("  //.classClass=&",className,"_Class,\n");
+		if (base != null) {
+			writeImpl("  //.baseClass=&",baseName,"_Class,\n");
+		} else {
+			writeImpl("  //.baseClass=0,\n");
 		}
-		writeImpl(" ",name,"__classinit_();\n");
-		writeImpl(" ",name,"_ClassInfo.class.classInitialized = 1;\n");
+		writeImpl("  //.arrayClass=,\n");
+		writeImpl("  },\n");
+		writeImpl("};\n");
+		
+		// Define the class initializer, that completes the Dispatch structure, and
+		// then calls the class initialization
+		
+		writeImpl("void ",PassCommon.INIT,"_",className,"() {\n");
+		writeImpl(" //LATER lock if multi-threads\n");
+		writeImpl(" int initBegan = ",className,"_Dispatch.init.classInitializationBegan;\n");
+		writeImpl(" // Whether or not class initialization had already began, it has begun now\n");
+		writeImpl(" ",className,"_Dispatch.init.classInitializationBegan = 1;\n");
+		writeImpl(" //LATER unlock if multi-threads\n");
+		writeImpl(" if (initBegan) {\n");
+		writeImpl("  //LATER busy wait until initialized\n");
+		writeImpl(" } else {\n");
+		if (base != null) {
+			writeImpl("  COB_CLASS_INIT(",baseName,")\n");
+			writeImpl("  memcpy(((void *)&",className,"_Dispatch)+sizeof(",className,"_Dispatch.init),",
+					           "((void *)&",baseName,"_Dispatch)+sizeof(",baseName,"_Dispatch.init),",
+					           "sizeof(",baseName,"_Dispatch)-sizeof(",baseName,"_Dispatch.init));\n");
+		}
+		for (Symbol member : defn.members.values()) {
+			if (member instanceof MethodSymbol && !member.isStatic()) {
+				MethodSymbol meth = (MethodSymbol)member;
+				String methName = meth.getName();
+				writeImpl("  ",className,"_Dispatch.",methName,"=&",className,"_",methName,";\n");
+			}
+		}
+		writeImpl("  ",className,"__classinit_();\n");
+		writeImpl("  ",className,"_Dispatch.init.classInitialized = 1;\n");
+		writeImpl(" }\n");
 		writeImpl("}\n");
+
 		klassNest.removeLast();
+		
+		// Save symbols for import
+        
+		try {
+			if (defn.getAutoImport()) {
+				
+			} else {
+				PrintWriter impWriter = passData.openFileWriter(defn.getName(),Main.IMPORT_SUFFIX);
+				impWriter.append("// Generated at ").append(passData.timeStamp).append("\n");
+				impWriter.append("// From ").append(passData.sourceFileName).append("\n");
+				for (Entry<String, Symbol> globEnt : passData.globals.getMembers().entrySet()) {
+					Symbol globSym = globEnt.getValue();
+					if (globSym == defn) continue;
+					if (globSym instanceof ClassSymbol && ((ClassSymbol)globSym).getAutoImport()) continue;
+					impWriter.append("import ").append(globSym.getName()).append(";\n");
+				}
+		        defn.writeImport(impWriter);
+		        impWriter.close();
+			}
+		} catch (IOException excp) {
+			Main.error("Unable to write import symbols "+excp.getMessage());
+		}
+		
 		return null;
 	}
 
@@ -68,7 +138,7 @@ public class CodePass extends PassCommon {
 		writeImpl(") {\n");
 		writeImpl(" COB_ENTER_METHOD(",name,",\"",method,"\")\n");
 		writeImpl(" COB_SOURCE_FILE(\"",passData.sourceFileName,"\")\n");
-		if (statics) writeImpl(" COB_CLASS_INIT(",klassNest.getLast(),")\n");
+		if (!statics) writeImpl(" COB_CLASS_INIT(",klassNest.getLast(),")\n");
 		for (CobParser.MemberContext member : ctx.member()) {
 			if (member instanceof CobParser.InitializerContext) {
 				CobParser.InitializerContext init = (CobParser.InitializerContext)member;
@@ -123,7 +193,7 @@ public class CodePass extends PassCommon {
 		String className = klassNest.getLast();
 		TerminalNode id = ctx.ID();
 		String sep = "";
-		writeImpl(className,"_",id.getText(),"(");
+		writeImpl("void ",className,"_",id.getText(),"(",className," this");
 		CobParser.ArgumentsContext arguments = ctx.arguments();
 		if (arguments != null) {
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
@@ -134,6 +204,27 @@ public class CodePass extends PassCommon {
 		writeImpl(")");
 		visitBody(ctx.body());
 		writeImpl("\n");
+		sep = "";
+		writeImpl(className," ",className,"_NEW(");
+		if (arguments != null) {
+			for (CobParser.ArgumentContext argument : arguments.argument()) {
+				writeImpl(sep);  sep = ",";
+				visit(argument);
+			}
+		}
+		writeImpl(") {\n");
+		writeImpl(" ",className," new=malloc(sizeof(struct ",className,"_Object));\n");
+		writeImpl(" //LATER check allocation failure\n");
+		writeImpl(" ",className,"_",id.getText(),"(new");
+		sep = ",";
+		if (arguments != null) {
+			for (CobParser.ArgumentContext argument : arguments.argument()) {
+				writeImpl(sep);  sep = ",";
+				visit(argument);
+			}
+		}
+		writeImpl(");\n");
+		writeImpl("}\n");
 		return null;
 	}
 	
@@ -187,7 +278,7 @@ public class CodePass extends PassCommon {
     			assert scope instanceof ClassSymbol;
     			writeImpl(((ClassSymbol)scope).getName(),"_",id);    		
     		} else {
-    			writeImpl("(*(this->class->methods.",id,"))");
+    			writeImpl("(*(this->dispatch->",id,"))");
     		}
     	} else if (sym instanceof VariableSymbol) {
     		if (sym.isStatic()) {
@@ -248,7 +339,7 @@ public class CodePass extends PassCommon {
     }
 
     @Override public Void visitNewPrimary(CobParser.NewPrimaryContext ctx) {
-    	writeImpl(ctx.ID().getText(),"_new","(");
+    	writeImpl(ctx.ID().getText(),"_NEW","(");
     	CobParser.ExpressionListContext args = ctx.expressionList();
     	if (args != null) {
     		visit(args);
@@ -270,7 +361,7 @@ public class CodePass extends PassCommon {
     @Override public Void visitInvokePrimary(CobParser.InvokePrimaryContext ctx) {
     	writeImpl("(");
     	visit(ctx.primary());
-    	writeImpl(")->methods.",ctx.ID().getText(),"(<obj>");  //TODO
+    	writeImpl(")->dispatch->",ctx.ID().getText(),"($obj$");  //TODO
     	CobParser.ExpressionListContext args = ctx.expressionList();
     	if (args != null) {
     		visit(args);

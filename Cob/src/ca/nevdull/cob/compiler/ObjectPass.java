@@ -36,7 +36,7 @@ public class ObjectPass extends PassCommon {
 			if (globSym == ctx.defn) continue;
 			writeDefn("#include \"",globSym.getName(),Main.DEFN_SUFFIX,"\"\n");
 		}
-		writeDefn("struct ",name,"_ClassInfo;\n");
+		writeDefn("struct ",name,"_Dispatch;\n");
 		writeDefn("struct ",name,"_Fields {\n");
 		if (base != null) writeDefn("  struct ",base.getText(),"_Fields _base;\n");
 		for (CobParser.MemberContext member : ctx.member()) {
@@ -44,7 +44,7 @@ public class ObjectPass extends PassCommon {
 		}
 		writeDefn("};\n");
 		writeDefn("struct ",name,"_Object {\n");
-		writeDefn("  struct ",name,"_ClassInfo *class;\n");
+		writeDefn("  struct ",name,"_Dispatch *dispatch;\n");
 		writeDefn("  struct ",name,"_Fields fields;\n");
 		writeDefn("};\n");
 		writeDefn("extern void ",PassCommon.INIT,"_",name,"();\n");

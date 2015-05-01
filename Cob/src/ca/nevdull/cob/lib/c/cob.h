@@ -1,6 +1,9 @@
 #ifndef COB_DEFN
 #define COB_DEFN
 
+#include <string.h>
+#include <stdlib.h>
+
 typedef unsigned char	cob_boolean;
 typedef signed char		cob_byte;
 typedef unsigned char	cob_char;
@@ -14,8 +17,10 @@ typedef short int		cob_short;
 #define cob_true			(cob_boolean)1
 #define cob_false			(cob_boolean)0
 
+#define COB_FORWARD_CLASS(klass) \
+	typedef struct klass ## _Object *klass;
 #define COB_CLASS_INIT(klass) \
-	if (!klass ## _ClassInfo.class.classInitialized) __INIT_ ## klass();
+	if (!klass ## _Dispatch.init.classInitialized) __INIT_ ## klass();
 #define COB_ENTER_METHOD(klass,methodStr)
 #define COB_EXIT_METHOD()
 #define COB_SOURCE_FILE(fileNameStr) \
@@ -24,13 +29,14 @@ typedef short int		cob_short;
 
 struct Class_Object;
 
-struct ClassTable {
+struct ClassInit {
     int             classInitialized;
     int				classInitializationBegan;
     const char*     className;
     const char*     packageName;
 //  const char*     enclosingClassName;
 //  const char*     enclosingMethodName;
+    int				instanceSize;
     struct Class_Object	*classClass;
     struct Class_Object	*baseClass;
     struct Class_Object *arrayClass;

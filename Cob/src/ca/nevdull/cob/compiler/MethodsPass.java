@@ -31,11 +31,11 @@ public class MethodsPass extends PassCommon {
 		}
 		if (!staticPass) {
 			writeDefn("};\n");
-			writeDefn("struct ",name,"_ClassInfo {\n");
-			writeDefn("  struct ClassTable class;\n");
+			writeDefn("struct ",name,"_Dispatch {\n");
+			writeDefn("  struct ClassInit init;\n");
 			writeDefn("  struct ",name,"_Methods methods;\n");
 			writeDefn("};\n");
-			writeDefn("extern struct ",name,"_ClassInfo ",name,"_ClassInfo;\n");
+			writeDefn("extern struct ",name,"_Dispatch ",name,"_Dispatch;\n");
 			writeDefn("extern void ",name,"_",PassCommon.CLASSINIT,"();\n");		
 			writeDefn("extern void ",name,"_",PassCommon.INSTANCEINIT,"(",name," this);\n");		
 		} else {
