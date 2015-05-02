@@ -81,7 +81,7 @@ unary																	locals [ Type tipe ]
     :   primary															# primaryUnary
     |   '++' unary														# incrementUnary
     |   '--' unary														# decrementUnary
-    |   ( '&' | '*' | '+' | '-' | '~' | '!' ) cast						# operatorUnary
+    |   op=( '+' | '-' | '~' | '!' ) cast								# operatorUnary
     ;
 
 cast																	locals [ Type tipe ]
@@ -91,17 +91,17 @@ cast																	locals [ Type tipe ]
 
 expression																locals [ Type tipe ]
     :   cast															# castExpression
-    |   expression ( '*' | '/' | '%' ) expression						# multiplyExpression
-    |   expression ( '+' | '-')  expression								# addExpression
-    |   expression ( '<<' | '>>' ) expression							# shiftExpression
-    |   expression ( '<' | '>' | '<=' | '>=') expression				# compareExpression
-    |   expression ( '==' | '!=' ) expression							# equalExpression
-    |   expression '&' expression										# andExpression
-    |   expression '^' expression										# exclusiveExpression
-    |   expression '|' expression										# orExpression
-    |   expression '&&' expression										# andThenExpression
-    |   expression '||' expression										# orElseExpression
-    |   expression '?' expression ':' expression						# conditionalExpression
+    |   l=expression op=( '*' | '/' | '%' ) r=expression				# multiplyExpression
+    |   l=expression op=( '+' | '-')  r=expression						# addExpression
+    |   l=expression op=( '<<' | '>>' ) r=expression					# shiftExpression
+    |   l=expression op=( '<' | '>' | '<=' | '>=') r=expression			# compareExpression
+    |   l=expression op=( '==' | '!=' ) r=expression					# equalExpression
+    |   l=expression op='&' r=expression								# andExpression
+    |   l=expression op='^' r=expression								# exclusiveExpression
+    |   l=expression op='|' r=expression								# orExpression
+    |   l=expression op='&&' r=expression								# andThenExpression
+    |   l=expression op='||' r=expression								# orElseExpression
+    |   c=expression op='?' t=expression ':' f=expression				# conditionalExpression
     ;
 
 assignment																locals [ Type tipe ]
@@ -126,12 +126,12 @@ blockItem
     |   statement
     ;
 
-declaration																	locals [ Symbol defn ]
+declaration
 	:	type variable ( variable )* ';'
 		//TODO static local
 	;
 	
-variable
+variable																	locals [ Symbol defn ]
 	:	ID ( '=' expression )?
 	;
 

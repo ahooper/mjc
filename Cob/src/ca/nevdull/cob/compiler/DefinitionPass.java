@@ -5,6 +5,7 @@ package ca.nevdull.cob.compiler;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -29,6 +30,7 @@ public class DefinitionPass extends PassCommon {
 		//"System",
 		};
 */
+	private final String preloadClassPrefix = "";  //TODO later "cob.lang.";
 	
 	public DefinitionPass(PassData data) {
 		super(data);
@@ -36,16 +38,43 @@ public class DefinitionPass extends PassCommon {
 		BaseScope globals = new BaseScope("globals",null);
 		data.globals = globals;
 		currentScope = globals;
-	/*
 		if (!passData.main.no_base) {
+			String preloadFilePrefix = preloadClassPrefix.replace('.',File.separatorChar);
+        	for (String pathDir : passData.main.bootClassPath) {
+            	File fname;
+				if (pathDir == null || pathDir.length() == 0) {
+        			if (passData.outputDir == null) fname = new File(preloadFilePrefix);
+        			else fname = new File(passData.outputDir,preloadFilePrefix);
+        		} else fname = new File(pathDir,preloadFilePrefix);
+            	if (! fname.isDirectory()) continue; // try next in path
+            	if (trace) Main.debug("preload found "+fname.getAbsolutePath());
+            	for (File f : fname.listFiles(new FilenameFilter() {
+								            	    @Override public boolean accept(File dir, String name) {
+								            	        return name.endsWith(Main.IMPORT_SUFFIX);
+								            	    }
+								            	}) ) {
+                 	System.out.println("preload "+f);
+/*                 	
+                    try {
+						//ClassSymbol klass = compileImport(f);
+						//TODO mark klass as tentative, don't need import in code if still tentative (never referenced)
+					} catch (IOException excp) {
+						Main.error("Unable to read import "+excp.toString());
+						excp.printStackTrace();
+					}
+*/					
+            	}
+                break;
+        	}
+/*
 			List<String> nameComponents = new ArrayList<String>();
 			for (String className : preloadClasses) {
 				nameComponents.clear();
 				nameComponents.add(className);
 				importClass(nameComponents, passData.main.bootClassPath);
 			}
+*/
 		}
-	*/
 	}
     
     private void beginScope(Scope newScope) {
@@ -202,6 +231,10 @@ public class DefinitionPass extends PassCommon {
 		}
 		currentScope.add(methSym);
 		beginScope(methSym);
+		if (ctx.stat == null) {
+			VariableSymbol varSym = new VariableSymbol("this",klass);
+			currentScope.add(varSym);
+		}
 		CobParser.ArgumentsContext arguments = ctx.arguments();
 		if (arguments != null) {
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
@@ -245,6 +278,7 @@ public class DefinitionPass extends PassCommon {
 		TerminalNode id = ctx.ID();
 		MethodSymbol methSym = new MethodSymbol(id.getSymbol(),currentScope,typeCtx.tipe);
 		methSym.setNative(true);
+		ctx.defn = methSym;
 		currentScope.add(methSym);
 		beginScope(methSym);
 		CobParser.ArgumentsContext arguments = ctx.arguments();
@@ -342,6 +376,16 @@ public class DefinitionPass extends PassCommon {
 		ctx.refScope = currentScope;
 		return null;
 	}
+
+    @Override public Void visitThisPrimary(CobParser.ThisPrimaryContext ctx) {
+		ctx.refScope = currentScope;
+        return null;
+    }
+
+    @Override public Void visitNewPrimary(CobParser.NewPrimaryContext ctx) {
+		ctx.refScope = currentScope;
+        return null;
+    }
 	
 	@Override public Void visitCompoundStatement(CobParser.CompoundStatementContext ctx) {
 		beginScope(new LocalScope(ctx.start.getLine(),currentScope));
@@ -364,9 +408,10 @@ public class DefinitionPass extends PassCommon {
 	
 	@Override public Void visitVariable(CobParser.VariableContext ctx) {
 		//	ID ( '=' expression )?
-		CobParser.DeclarationContext list = (CobParser.DeclarationContext)ctx.getParent();
-		VariableSymbol varSym = new VariableSymbol(ctx.ID().getSymbol(),list.type().tipe);
+		CobParser.DeclarationContext decl = (CobParser.DeclarationContext)ctx.getParent();
+		VariableSymbol varSym = new VariableSymbol(ctx.ID().getSymbol(),decl.type().tipe);
 		varSym.setStatic(false);
+		ctx.defn = varSym;
 		currentScope.add(varSym);
 		CobParser.ExpressionContext e = ctx.expression();
 		if (e != null) {

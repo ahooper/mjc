@@ -75,6 +75,7 @@ public class NewObjectPass extends PassCommon {
 		writeDefn("} ",name,"_Dispatch;\n");
 		writeDefn("extern void ",name,"_",PassCommon.CLASSINIT,"();\n");		
 		writeDefn("extern void ",name,"_",PassCommon.INSTANCEINIT,"(",name," this);\n");		
+		writeDefn("extern void ",name,"_",PassCommon.NEW,"();\n");		
 		visitMethods(klass, true/*staticPass*/);
 
 		writeDefn("#endif /*",name,"_DEFN*/\n");
@@ -132,6 +133,10 @@ public class NewObjectPass extends PassCommon {
 				}
 			}
 		}
+		if (klass.findMember(className) == null) {
+			// define a default constructor
+			writeDefn("extern void ",className,"_",className,"();\n");
+		}
 	}
 
 	private void doArguments(MethodSymbol method, String sep) {
@@ -148,5 +153,5 @@ public class NewObjectPass extends PassCommon {
 		}
 		writeDefn(");\n");
 	}
-	
+
 }

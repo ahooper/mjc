@@ -10,6 +10,7 @@ public class PassCommon extends CobBaseVisitor<Void> {
 	protected static final String INSTANCEINIT = "_init_";
 	protected static final String CLASSINIT = "_classinit_";
 	protected static final String INIT = "__INIT";
+	protected static final String NEW = "_NEW";
 	protected PassData passData;
 
 	public PassCommon(PassData data) {

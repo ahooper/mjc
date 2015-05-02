@@ -50,6 +50,7 @@ public class CodePass extends PassCommon {
 				writeImpl(" ",baseName,"_",baseName,"();\n");
 			}
 			writeImpl("}\n");
+			writeNew(className, className, null);
 		}
 		doInitializers(ctx, className, false);
 		doInitializers(ctx, className, true);
@@ -204,8 +205,14 @@ public class CodePass extends PassCommon {
 		writeImpl(")");
 		visitBody(ctx.body());
 		writeImpl("\n");
-		sep = "";
-		writeImpl(className," ",className,"_NEW(");
+		writeNew(className, id.getText(), arguments);
+		return null;
+	}
+
+	private void writeNew(String className, String constructorName,
+			CobParser.ArgumentsContext arguments) {
+		String sep = "";
+		writeImpl(className," ",className,PassCommon.NEW,"(");
 		if (arguments != null) {
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
 				writeImpl(sep);  sep = ",";
@@ -215,7 +222,7 @@ public class CodePass extends PassCommon {
 		writeImpl(") {\n");
 		writeImpl(" ",className," new=malloc(sizeof(struct ",className,"_Object));\n");
 		writeImpl(" //LATER check allocation failure\n");
-		writeImpl(" ",className,"_",id.getText(),"(new");
+		writeImpl(" ",className,"_",constructorName,"(new");
 		sep = ",";
 		if (arguments != null) {
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
@@ -225,7 +232,6 @@ public class CodePass extends PassCommon {
 		}
 		writeImpl(");\n");
 		writeImpl("}\n");
-		return null;
 	}
 	
 	@Override public Void visitNativeMethod(CobParser.NativeMethodContext ctx) {
@@ -297,49 +303,78 @@ public class CodePass extends PassCommon {
     }
 
     @Override public Void visitThisPrimary(CobParser.ThisPrimaryContext ctx) {
-        writeImpl("this");
+    	Symbol sym = ctx.refScope.find("this");
+    	if (sym == null) {
+    		Main.error(ctx.start,"'this' is not defined");
+    		return null;
+    	}
+    	ctx.tipe = sym.type;
+    	Scope scope = sym.getScope();
+    	if (trace) Main.debug("%s%s scope=%s", sym, (sym.isStatic())?" static":"", scope);
+    	assert sym instanceof VariableSymbol && !sym.isStatic();
+    	writeImpl("this");
         return null;
     }
 
     @Override public Void visitIntegerPrimary(CobParser.IntegerPrimaryContext ctx) {
+    	ctx.tipe = PrimitiveType.intType;
     	String t = ctx.start.getText();
-        visitChildren(ctx);
+    	if (t.endsWith("l") || t.endsWith("L")) ctx.tipe = PrimitiveType.longType;
         return null;
     }
 
     @Override public Void visitFloatingPrimary(CobParser.FloatingPrimaryContext ctx) {
+    	ctx.tipe = PrimitiveType.floatType;
     	String t = ctx.start.getText();
-        visitChildren(ctx);
+    	if (t.endsWith("l") || t.endsWith("L")) ctx.tipe = PrimitiveType.doubleType;
         return null;
     }
 
     @Override public Void visitStringPrimary(CobParser.StringPrimaryContext ctx) {
-        visitChildren(ctx);
+    	//TODO find String type
+    	//TODO writeImpl
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitNullPrimary(CobParser.NullPrimaryContext ctx) {
+    	//TODO find Object type
         writeImpl("cob_null");
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitTruePrimary(CobParser.TruePrimaryContext ctx) {
+    	ctx.tipe = PrimitiveType.booleanType;
         writeImpl("cob_true");
         return null;
     }
 
     @Override public Void visitFalsePrimary(CobParser.FalsePrimaryContext ctx) {
+    	ctx.tipe = PrimitiveType.booleanType;
         writeImpl("cob_false");
         return null;
     }
 
     @Override public Void visitParenPrimary(CobParser.ParenPrimaryContext ctx) {
         visitChildren(ctx);
+    	ctx.tipe = ctx.sequence().tipe;
         return null;
     }
 
     @Override public Void visitNewPrimary(CobParser.NewPrimaryContext ctx) {
-    	writeImpl(ctx.ID().getText(),"_NEW","(");
+    	String id = ctx.ID().getText();
+    	Symbol sym = ctx.refScope.find(id);
+    	if (sym == null) {
+    		Main.error(ctx.ID(),id+" is not defined");
+    		return null;
+    	}
+    	if (!(sym instanceof ClassSymbol)) {
+    		Main.error(ctx.ID(),id+" is not a type");
+    		return null;
+    	}
+    	ctx.tipe = sym.type;
+    	writeImpl(ctx.ID().getText(),PassCommon.NEW,"(");
     	CobParser.ExpressionListContext args = ctx.expressionList();
     	if (args != null) {
     		visit(args);
@@ -349,24 +384,38 @@ public class CodePass extends PassCommon {
     }
 
     @Override public Void visitIndexPrimary(CobParser.IndexPrimaryContext ctx) {
-        visitChildren(ctx);
+    	CobParser.PrimaryContext prim = ctx.primary();
+    	visit(prim);
+    	Type type = prim.tipe;
+    	if (type instanceof ArrayType) {
+	    	CobParser.SequenceContext seq = ctx.sequence();
+	    	visit(seq);
+	    	ctx.tipe = ((ArrayType)type).getElementType();    		
+    	} else {
+    		Main.error(prim.stop,"array type expected");
+    		ctx.tipe = UnknownType.make(prim.start);
+    		return null;
+    	}
         return null;
     }
 
     @Override public Void visitCallPrimary(CobParser.CallPrimaryContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitInvokePrimary(CobParser.InvokePrimaryContext ctx) {
-    	writeImpl("(");
+    	Type type = ctx.tipe;//TODO
+    	writeImpl("(",type.getNameString()," ",type.getArrayString(),"_t=");
     	visit(ctx.primary());
-    	writeImpl(")->dispatch->",ctx.ID().getText(),"($obj$");  //TODO
+    	writeImpl(",_t->dispatch->",ctx.ID().getText(),"(t");
     	CobParser.ExpressionListContext args = ctx.expressionList();
     	if (args != null) {
     		visit(args);
     	}
-		writeImpl(")");
+		writeImpl("))");
+//TODO ctx.tipe =
         return null;
     }
 
@@ -374,16 +423,19 @@ public class CodePass extends PassCommon {
     	writeImpl("(");
     	visit(ctx.primary());
     	writeImpl(")->fields.",ctx.ID().getText());
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitIncrementPrimary(CobParser.IncrementPrimaryContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitDecrementPrimary(CobParser.DecrementPrimaryContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
@@ -394,106 +446,156 @@ public class CodePass extends PassCommon {
 
     @Override public Void visitPrimaryUnary(CobParser.PrimaryUnaryContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitIncrementUnary(CobParser.IncrementUnaryContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitDecrementUnary(CobParser.DecrementUnaryContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitOperatorUnary(CobParser.OperatorUnaryContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitUnaryCast(CobParser.UnaryCastContext ctx) {
         visitChildren(ctx);
+		ctx.tipe = ctx.unary().tipe;
         return null;
     }
 
     @Override public Void visitTypeCast(CobParser.TypeCastContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitCastExpression(CobParser.CastExpressionContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitMultiplyExpression(CobParser.MultiplyExpressionContext ctx) {
         visitChildren(ctx);
+        if (ctx.l.tipe == ctx.r.tipe) {
+        	//LATER allow conversions (requires to defer writing operands so conversions can be inserted)
+        } else {
+        	Main.error(ctx.op,"operand types must be the same");
+        }
+    	ctx.tipe = ctx.l.tipe;
         return null;
     }
 
     @Override public Void visitAddExpression(CobParser.AddExpressionContext ctx) {
         visitChildren(ctx);
+        if (ctx.l.tipe == ctx.r.tipe) {
+        	//LATER allow conversions (requires to defer writing operands so conversions can be inserted)
+        } else {
+        	Main.error(ctx.op,"operand types must be the same");
+        }
+    	ctx.tipe = ctx.l.tipe;
         return null;
     }
 
     @Override public Void visitShiftExpression(CobParser.ShiftExpressionContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitCompareExpression(CobParser.CompareExpressionContext ctx) {
         visitChildren(ctx);
+        if (ctx.l.tipe == ctx.r.tipe) {
+        	//LATER allow conversions (requires to defer writing operands so conversions can be inserted)
+        } else {
+        	Main.error(ctx.op,"operand types must be the same");
+        }
+    	ctx.tipe = PrimitiveType.booleanType;
         return null;
     }
 
     @Override public Void visitEqualExpression(CobParser.EqualExpressionContext ctx) {
         visitChildren(ctx);
+        if (ctx.l.tipe == ctx.r.tipe) {
+        	//LATER allow conversions (requires to defer writing operands so conversions can be inserted)
+        } else {
+        	Main.error(ctx.op,"operand types must be the same");
+        }
+        ctx.tipe = PrimitiveType.booleanType;
         return null;
     }
 
     @Override public Void visitAndExpression(CobParser.AndExpressionContext ctx) {
         visitChildren(ctx);
+        if (ctx.l.tipe == ctx.r.tipe) {
+        	//LATER allow conversions (requires to defer writing operands so conversions can be inserted)
+        } else {
+        	Main.error(ctx.op,"operand types must be the same");
+        }
+    	ctx.tipe = ctx.l.tipe;
         return null;
     }
 
     @Override public Void visitExclusiveExpression(CobParser.ExclusiveExpressionContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitOrExpression(CobParser.OrExpressionContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitAndThenExpression(CobParser.AndThenExpressionContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitOrElseExpression(CobParser.OrElseExpressionContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitConditionalExpression(CobParser.ConditionalExpressionContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitAssignment(CobParser.AssignmentContext ctx) {
         visitChildren(ctx);
+//TODO ctx.tipe =
         return null;
     }
 
     @Override public Void visitSequence(CobParser.SequenceContext ctx) {
-        visitChildren(ctx);
+ 		for (CobParser.AssignmentContext assign : ctx.assignment()) {
+        	visitAssignment(assign);
+        	ctx.tipe = assign.tipe;  // last one stays
+        }
         return null;
     }
 
     @Override public Void visitConstantExpression(CobParser.ConstantExpressionContext ctx) {
-        visitChildren(ctx);
+    	CobParser.ExpressionContext expr = ctx.expression();
+        visit(expr);
+        //TODO ensure constant computable
+        ctx.tipe = expr.tipe;
         return null;
     }
 
@@ -526,7 +628,6 @@ public class CodePass extends PassCommon {
     }
 
     @Override public Void visitDeclaration(CobParser.DeclarationContext ctx) {
-		CobParser.TypeContext typeCtx = ctx.type();
 		String sep = "";
 		for (CobParser.VariableContext var : ctx.variable()) {
 			writeImpl(sep);
@@ -538,8 +639,8 @@ public class CodePass extends PassCommon {
     }
 
     @Override public Void visitVariable(CobParser.VariableContext ctx) {
-		CobParser.DeclarationContext list = (CobParser.DeclarationContext)ctx.getParent();
-		Type type = list.type().tipe;
+		CobParser.DeclarationContext decl = (CobParser.DeclarationContext)ctx.getParent();
+		Type type = decl.type().tipe;
 		writeImpl(" ",type.getNameString()," ",type.getArrayString(),ctx.ID().getText());
 		CobParser.ExpressionContext expr = ctx.expression();
 		if (expr != null) {

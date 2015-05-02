@@ -13,6 +13,10 @@ public class VariableSymbol extends Symbol {
 		super(id, type);
 	}
 
+	public VariableSymbol(String id, Type type) {
+		super(id, type);
+	}
+
 	public void writeImport(PrintWriter pw) {
 		super.writeImport(pw);
 	}

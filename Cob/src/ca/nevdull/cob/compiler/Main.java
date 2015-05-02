@@ -234,25 +234,11 @@ public class Main {
 	        //System.out.println(DIVIDER);
  	        
  			// Produce the class instance structure (object fields) to the class definition file
-//	        ObjectPass objectPass = new ObjectPass(passData);
 	        NewObjectPass objectPass = new NewObjectPass(passData);
 	        objectPass.visit(tree);
-/*
-	        // Produce the class methods list structure to the class definition file
-	        MethodsPass methodsPass = new MethodsPass(passData,false**staticPass**);
-	        methodsPass.visit(tree);
-	        MethodsPass staticPass = new MethodsPass(passData,trues**taticPass**);
-	        staticPass.visit(tree);
-*/
 	        // Produce the target language code to the class implementation file
 	        CodePass codePass = new CodePass(passData);
 	        codePass.visit(tree);
-	        // Produce the class method list initialization to the class implementation file, 
-//	        TablesPass tablesPass = new TablesPass(passData);
-	        /*
-	        NewTablesPass tablesPass = new NewTablesPass(passData);
-	        tablesPass.visit(tree);
-	        */
 	        
 		} catch (IOException excp) {
 			error(excp.getMessage());
