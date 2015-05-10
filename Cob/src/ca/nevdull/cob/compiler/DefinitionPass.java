@@ -384,6 +384,7 @@ public class DefinitionPass extends PassCommon {
 
     @Override public Void visitNewPrimary(CobParser.NewPrimaryContext ctx) {
 		ctx.refScope = currentScope;
+		visitChildren(ctx);
         return null;
     }
 	

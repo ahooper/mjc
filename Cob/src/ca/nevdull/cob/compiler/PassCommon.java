@@ -35,6 +35,10 @@ public class PassCommon extends CobBaseVisitor<Void> {
 	}
 
 	// Write to class definitions (classname.h) output file
+	protected void writeDefn(String s) {
+		passData.defnStream.print(s);
+	}
+
 	protected void writeDefn(String... list) {
 		for (String s : list) {
 			passData.defnStream.print(s);
@@ -42,10 +46,19 @@ public class PassCommon extends CobBaseVisitor<Void> {
 	}
 
 	// Write to class implementation (classname.c) output file
+	protected void writeImpl(String s) {
+		passData.implStream.print(s);
+	}
+
 	protected void writeImpl(String... list) {
 		for (String s : list) {
 			passData.implStream.print(s);
 		}
+	}
+
+	// Write to class implementation (classname.c) output file
+	protected void writeImpl(Exp exp) {
+		exp.write(passData.implStream);
 	}
 
 }

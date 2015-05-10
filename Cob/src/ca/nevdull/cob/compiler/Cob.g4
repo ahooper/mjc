@@ -54,7 +54,7 @@ field
 	:	ID ( '=' expression )?
 	;
 
-primary																	locals [ Scope refScope, Type tipe ]
+primary																	locals [ Scope refScope, Type tipe, Exp exp ]
     :   ID																# namePrimary
     |	'this'															# thisPrimary
     |   Integer															# integerPrimary
@@ -69,27 +69,25 @@ primary																	locals [ Scope refScope, Type tipe ]
     |   primary '(' expressionList? ')'									# callPrimary
     |   primary  '.' ID '(' expressionList? ')'							# invokePrimary
     |   primary '.' ID													# memberPrimary
-    |   primary '++'													# incrementPrimary
-    |   primary '--'													# decrementPrimary
+    |   primary op=( '++' | '--' )										# incrementPrimary
     ;
 
-expressionList
+expressionList															locals [ Exp exp ]
     :   assignment ( ',' assignment )*
     ;
 
-unary																	locals [ Type tipe ]
+unary																	locals [ Type tipe, Exp exp ]
     :   primary															# primaryUnary
-    |   '++' unary														# incrementUnary
-    |   '--' unary														# decrementUnary
+    |   op=( '++' | '--' ) unary										# incrementUnary
     |   op=( '+' | '-' | '~' | '!' ) cast								# operatorUnary
     ;
 
-cast																	locals [ Type tipe ]
+cast																	locals [ Type tipe, Exp exp ]
     :   unary															# unaryCast
     |   '(' typeName ')' cast											# typeCast
     ;
 
-expression																locals [ Type tipe ]
+expression																locals [ Type tipe, Exp exp ]
     :   cast															# castExpression
     |   l=expression op=( '*' | '/' | '%' ) r=expression				# multiplyExpression
     |   l=expression op=( '+' | '-')  r=expression						# addExpression
@@ -104,12 +102,12 @@ expression																locals [ Type tipe ]
     |   c=expression op='?' t=expression ':' f=expression				# conditionalExpression
     ;
 
-assignment																locals [ Type tipe ]
+assignment																locals [ Type tipe, Exp exp ]
     :   expression
-    |   unary ( '=' | '*=' | '/=' | '%=' | '+=' | '-=' | '<<=' | '>>=' | '&=' | '^=' | '|=' ) assignment
+    |   l=unary op=( '=' | '*=' | '/=' | '%=' | '+=' | '-=' | '<<=' | '>>=' | '&=' | '^=' | '|=' ) r=assignment
     ;
 
-sequence																locals [ Type tipe ]
+sequence																locals [ Type tipe, Exp exp ]
     :   assignment ( ',' assignment )*
     ;
 
@@ -139,12 +137,12 @@ statement
     :   ID ':' statement													# labelStatement
     |   compoundStatement													# cmpdStatement
     |   sequence? ';'														# expressionStatement
-    |   'if' '(' sequence ')' statement ('else' statement)?					# ifStatement
+    |   'if' '(' sequence ')' t=statement ('else' f=statement)?				# ifStatement
     |   'switch' '(' sequence ')' '{' switchItem+ '}'						# switchStatement
     |   'while' '(' sequence ')' statement									# whileStatement
     |   'do' statement 'while' '(' sequence ')' ';'							# doStatement
-    |   'for' '(' sequence? ';' sequence? ';' sequence? ')' statement		# forStatement
-    |   'for' '(' declaration sequence? ';' sequence? ')' statement			# forDeclStatement
+    |   'for' '(' b=sequence? ';' w=sequence? ';' a=sequence? ')' statement	# forStatement
+    |   'for' '(' declaration w=sequence? ';' a=sequence? ')' statement		# forDeclStatement
     |   'continue' ';'														# continueStatement
     |   'break' ';'															# breakStatement
     |   'return' sequence? ';'												# returnStatement

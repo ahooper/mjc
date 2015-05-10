@@ -234,7 +234,7 @@ public class Main {
 	        //System.out.println(DIVIDER);
  	        
  			// Produce the class instance structure (object fields) to the class definition file
-	        NewObjectPass objectPass = new NewObjectPass(passData);
+	        ObjectPass objectPass = new ObjectPass(passData);
 	        objectPass.visit(tree);
 	        // Produce the target language code to the class implementation file
 	        CodePass codePass = new CodePass(passData);

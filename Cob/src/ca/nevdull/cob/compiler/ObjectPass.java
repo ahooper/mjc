@@ -9,11 +9,11 @@ import java.util.Map.Entry;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
-public class NewObjectPass extends PassCommon {
+public class ObjectPass extends PassCommon {
 
 	private boolean trace;
 
-	public NewObjectPass(PassData data) {
+	public ObjectPass(PassData data) {
 		super(data);
     	trace = passData.main.trace.contains("ObjectPass");
 	}
