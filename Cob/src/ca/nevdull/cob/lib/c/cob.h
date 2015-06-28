@@ -1,8 +1,9 @@
 #ifndef COB_DEFN
 #define COB_DEFN
 
-#include <string.h>
-#include <stdlib.h>
+#include <stddef.h>
+void *memcpy(void *restrict, const void *restrict, size_t);
+void *malloc(size_t);
 
 typedef unsigned char	cob_boolean;
 typedef signed char		cob_byte;
@@ -13,9 +14,9 @@ typedef int				cob_int;
 typedef long int		cob_long;
 typedef short int		cob_short;
 
-#define cob_null			((void *)0)
-#define cob_true			(cob_boolean)1
-#define cob_false			(cob_boolean)0
+#define cob_null		((void *)0)
+#define cob_true		((cob_boolean)1)
+#define cob_false		((cob_boolean)0)
 
 #define COB_FORWARD_CLASS(klass) \
 	typedef struct klass ## _Object *klass;

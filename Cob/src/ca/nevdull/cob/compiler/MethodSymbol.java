@@ -36,6 +36,7 @@ public class MethodSymbol extends ScopingSymbol {
 		pw.append("(");
 		String sep = "";
 		for (Entry<String, Symbol> paramEnt : getMembers().entrySet()) {
+			if (sep.length()==0 && paramEnt.getKey().equals("this")) continue; //TODO a cleaner way?
 			pw.append(sep);  sep = ",";
 			paramEnt.getValue().writeImport(pw);
 		}

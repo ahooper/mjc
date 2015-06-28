@@ -255,11 +255,14 @@ public class DefinitionPass extends PassCommon {
 		} else {
 			Main.error(id,"Constructor name must match class name");
 		}
+		ClassSymbol klass = (ClassSymbol)currentScope;
 		MethodSymbol methSym = new MethodSymbol(id.getSymbol(),currentScope,PrimitiveType.voidType);
 		methSym.setStatic(true);
 		ctx.defn = methSym;
 		currentScope.add(methSym);
 		beginScope(methSym);
+		VariableSymbol varSym = new VariableSymbol("this",klass);
+		currentScope.add(varSym);
 		CobParser.ArgumentsContext arguments = ctx.arguments();
 		if (arguments != null) {
 			for (CobParser.ArgumentContext argument : arguments.argument()) {
@@ -331,11 +334,12 @@ public class DefinitionPass extends PassCommon {
 	}
 	
 	@Override public Void visitType(CobParser.TypeContext ctx) {
-		visitTypeName(ctx.typeName());
+		CobParser.TypeNameContext typeName = ctx.typeName();
+		visitTypeName(typeName);
 		if (ctx.getChildCount() > 1) {
-			ctx.tipe = new ArrayType(ctx.typeName().tipe);
+			ctx.tipe = new ArrayType(typeName.tipe);
 		} else {
-			ctx.tipe = ctx.typeName().tipe;
+			ctx.tipe = typeName.tipe;
 		}
 		return null;
 	}
@@ -344,7 +348,9 @@ public class DefinitionPass extends PassCommon {
 		ctx.refScope = currentScope;
 		TerminalNode id = ctx.ID();
 		if (id == null) {
-			ctx.tipe = PrimitiveType.getByName(ctx.start.getText());
+			CobParser.PrimitiveTypeContext pt = ctx.primitiveType();
+			visitPrimitiveType(pt);
+			ctx.tipe = pt.tipe;
 			assert ctx.tipe != null;
 		} else {
 			String name = id.getText();
@@ -363,6 +369,12 @@ public class DefinitionPass extends PassCommon {
 				Main.error(id,name+" is not a type");
 			}
 		}
+		return null;
+	}
+	
+	@Override public Void visitPrimitiveType(CobParser.PrimitiveTypeContext ctx) {
+		ctx.tipe = PrimitiveType.getByName(ctx.start.getText());
+		assert ctx.tipe != null;
 		return null;
 	}
 	

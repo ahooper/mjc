@@ -58,7 +58,7 @@ public class Main {
     
     static int errorCount = 0;
 	private static final int ERROR_LIMIT = 100;
-	private static final String ERROR_LINE_D_D_AT_S_S = "Line %d@%d at %s: %s\n";  //printf format string
+	private static final String ERROR_LINE_D_D_AT_S_S = "Line %d@%d '%s': %s\n";  //printf format string
 
 	///// Compiler main program and options processing
 	
@@ -103,9 +103,9 @@ public class Main {
 	
 	private static void errprintf(String format, Object... args) {
 		//TODO if (errorCount >= ERROR_LIMIT) throw new Exception("too many errors");
-		System.err.print("\033[1;31m");
+		//System.err.print("\033[1;31m");
 		System.err.printf(format, args);
-		System.err.print("\033[0m");
+		//System.err.print("\033[0m");
         System.err.flush();
         errorCount  += 1;
 	}

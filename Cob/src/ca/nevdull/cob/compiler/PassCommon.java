@@ -23,6 +23,18 @@ public class PassCommon extends CobBaseVisitor<Void> {
 		Main.debugn("%s%s",indent,t.getClass().getSimpleName());
 		if (t instanceof TerminalNodeImpl) {
 			Main.debugn(" %s", (TerminalNodeImpl)t);
+		} else if (t instanceof CobParser.PrimaryContext) {
+			printContextTipe(((CobParser.PrimaryContext)t).tipe);
+			printContextExp(((CobParser.PrimaryContext)t).exp);
+		} else if (t instanceof CobParser.ExpressionContext) {
+			printContextTipe(((CobParser.ExpressionContext)t).tipe);
+			printContextExp(((CobParser.ExpressionContext)t).exp);
+		} else if (t instanceof CobParser.AssignmentContext) {
+			printContextTipe(((CobParser.AssignmentContext)t).tipe);
+			printContextExp(((CobParser.AssignmentContext)t).exp);
+		} else if (t instanceof CobParser.SequenceContext) {
+			printContextTipe(((CobParser.SequenceContext)t).tipe);
+			printContextExp(((CobParser.SequenceContext)t).exp);
 		}
 		Main.debug("");
 		if (t.getChildCount() == 0) {
@@ -32,6 +44,14 @@ public class PassCommon extends CobBaseVisitor<Void> {
 				printContextTree(t.getChild(i), indent);
 			}
 		}
+	}
+
+	private void printContextTipe(Type tipe) {
+		Main.debugn(" type=%s", tipe==null?"null":tipe.toString());
+	}
+
+	private void printContextExp(Exp exp) {
+		Main.debugn(" exp=%s", exp==null?"null":exp.toString());
 	}
 
 	// Write to class definitions (classname.h) output file

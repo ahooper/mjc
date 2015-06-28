@@ -65,7 +65,7 @@ public class ObjectPass extends PassCommon {
 		writeDefn("  struct ",name,"_Dispatch *dispatch;\n");
 		writeDefn("  struct ",name,"_Fields fields;\n");
 		writeDefn("};\n");
-		writeDefn("extern void ",PassCommon.INIT,"_",name,"();\n");
+		writeDefn("void ",PassCommon.INIT,"_",name,"();\n");
 		
 		// The method dispatch table
 		
@@ -73,9 +73,9 @@ public class ObjectPass extends PassCommon {
 		writeDefn("  struct ClassInit init;\n");
 		visitMethods(klass, false/*staticPass*/);
 		writeDefn("} ",name,"_Dispatch;\n");
-		writeDefn("extern void ",name,"_",PassCommon.CLASSINIT,"();\n");		
-		writeDefn("extern void ",name,"_",PassCommon.INSTANCEINIT,"(",name," this);\n");		
-		writeDefn("extern void ",name,"_",PassCommon.NEW,"();\n");		
+		writeDefn("void ",name,"_",PassCommon.CLASSINIT,"();\n");
+		writeDefn("void ",name,"_",PassCommon.INSTANCEINIT,"(",name," this);\n");
+		writeDefn(name," ",name,"_",PassCommon.NEW,"();\n");
 		visitMethods(klass, true/*staticPass*/);
 
 		writeDefn("#endif /*",name,"_DEFN*/\n");
@@ -116,26 +116,24 @@ public class ObjectPass extends PassCommon {
 				String methName = method.getName();
 				if (method.isStatic() == staticPass) {
 					if (staticPass) {
-						writeDefn("extern ",methType.getNameString()," ",methType.getArrayString(),cName,"_",methName,"(");
+						writeDefn(methType.getNameString()," ",methType.getArrayString(),cName,"_",methName,"(");
 					} else {
-						writeDefn("  ",methType.getNameString()," (*",methType.getArrayString(),methName,")(",cName," this");
-						sep = ",";
+						writeDefn("  ",methType.getNameString()," (*",methType.getArrayString(),methName,")(");
 					}
 					doArguments(method, sep);
 				} else if (method.isNative()) {
 					if (staticPass) {
-						writeDefn("extern ",methType.getNameString()," ",methType.getArrayString(),cName,"_",methName,"(",cName," this");
+						writeDefn(methType.getNameString()," ",methType.getArrayString(),cName,"_",methName,"(");
 					} else {
-						writeDefn("  ",methType.getNameString()," (*",methType.getArrayString(),methName,")(",cName," this");
+						writeDefn("  ",methType.getNameString()," (*",methType.getArrayString(),methName,")(");
 					}
-					sep = ",";
 					doArguments(method, sep);
 				}
 			}
 		}
-		if (klass.findMember(className) == null) {
+		if (klass.findMember(className) == null && staticPass) {
 			// define a default constructor
-			writeDefn("extern void ",className,"_",className,"();\n");
+			writeDefn("void ",className,"_",className,"(",className," this);\n");
 		}
 	}
 

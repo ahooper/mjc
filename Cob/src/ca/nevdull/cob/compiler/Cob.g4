@@ -38,6 +38,11 @@ type																	locals [ Type tipe ]
 	;
 	
 typeName																locals [ Scope refScope, Type tipe ]
+	:	primitiveType
+	|	ID
+	;
+	
+primitiveType															locals [ Type tipe ]
 	:	'boolean'
 	|	'byte'
 	|	'char'
@@ -47,7 +52,6 @@ typeName																locals [ Scope refScope, Type tipe ]
 	|	'long'
 	|	'short'
 	|	'void'
-	|	ID
 	;
 
 field

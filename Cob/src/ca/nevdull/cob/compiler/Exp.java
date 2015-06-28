@@ -17,6 +17,9 @@ public class Exp {
 		public void write(PrintStream stream) {
 			stream.print(string);
 		}
+		public String toString() {
+			return string;
+		}
 	}
 
 	public Exp() {
@@ -46,12 +49,17 @@ public class Exp {
 	}
 
 	public Exp add(Exp exp) {
+		assert exp != null;
 		list.add(exp);
 		return this;  // for "fluent" interface
 	}
 	
 	public void write(PrintStream stream) {
 		for (Exp e : list) e.write(stream);
+	}
+	
+	public String toString() {
+		return list.toString();
 	}
 
 }

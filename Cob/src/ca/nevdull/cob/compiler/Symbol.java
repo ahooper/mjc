@@ -59,6 +59,7 @@ public class Symbol {
 	}
 
 	public void writeImport(PrintWriter pw) {
+		if (isStatic) pw.append("static ");
 		type.writeImportType(pw);
 		pw.append(' ').append(name);
 	}
