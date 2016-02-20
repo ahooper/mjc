@@ -15,7 +15,7 @@ public class BasicBlock {
     }
 
     public BasicBlock(Function function) {
-    	this(function, String.format("%%b%d", function.getCounter()));
+    	this(function, String.format("%%b%d", function.nextCounter()));
     }
 	
 	public String getLabel() {

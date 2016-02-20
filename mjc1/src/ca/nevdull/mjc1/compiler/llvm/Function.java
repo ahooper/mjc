@@ -39,7 +39,7 @@ public class Function {
 		return parameterNames;
 	}
 
-	public int getCounter() {
+	public int nextCounter() {
 		return ++counter;
 	}
 

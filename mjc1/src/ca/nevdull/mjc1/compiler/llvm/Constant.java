@@ -20,32 +20,32 @@ public class Constant extends Operand {
 	public static Constant TRUE = new Constant(Type.I1, "true");
 	public static Constant FALSE = new Constant(Type.I1, "false");
 	
-	public static Constant integer(byte value) {
-		return new Constant(Type.I8, Byte.toString(value));
+	public Constant(byte value) {
+		this(Type.I8, Byte.toString(value));
 	}
 	
-	public static Constant integer(short value) {
-		return new Constant(Type.I16, Short.toString(value));
+	public Constant(short value) {
+		this(Type.I16, Short.toString(value));
 	}
 	
-	public static Constant integer(int value) {
-		return new Constant(Type.I32, Integer.toString(value));
+	public Constant(int value) {
+		this(Type.I32, Integer.toString(value));
 	}
 	
-	public static Constant integer(long value) {
-		return new Constant(Type.I64, Long.toString(value));
+	public Constant(long value) {
+		this(Type.I64, Long.toString(value));
 	}
 	
-	public static Constant floating(float value) {
-		return new Constant(Type.FLOAT, Float.toString(value));
+	public Constant(float value) {
+		this(Type.FLOAT, Float.toString(value));
 	}
 	
-	public static Constant floating(double value) {
-		return new Constant(Type.DOUBLE, Double.toString(value));
+	public Constant(double value) {
+		this(Type.DOUBLE, Double.toString(value));
 	}
 	
-	public static Constant nulll(PointerType type) {
-		return new Constant(type, "null");
+	public Constant(PointerType type) {
+		this(type, "null");
 	}
 	
 	public static Constant array(Type type, Operand ... values) {

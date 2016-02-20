@@ -14,7 +14,7 @@ public class Instruction extends Operand {
 
 	public void setBasicBlock(BasicBlock basicBlock) {
 		this.basicBlock = basicBlock;
-		this.resultName = String.format("%%r%d", basicBlock.getFunction().getCounter());
+		this.resultName = String.format("%%r%d", basicBlock.getFunction().nextCounter());
 	}
 
 	public String getResultName() {

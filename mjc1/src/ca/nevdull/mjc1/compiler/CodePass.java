@@ -51,14 +51,17 @@ import ca.nevdull.mjc1.compiler.MJ1Parser.VariableDeclaratorIdContext;
 import ca.nevdull.mjc1.compiler.MJ1Parser.VariableDeclaratorsContext;
 import ca.nevdull.mjc1.compiler.MJ1Parser.WhileStatementContext;
 
-public class CodePass extends MJ1BaseVisitor<CodeReg> {
+public class CodePass extends MJ1BaseVisitor<CodeSym> {
 
 	private String modulePrefix;
+
+	private CodeGen gen;
 
 	public CodePass(String fileName) {
 		int x = fileName.lastIndexOf('.');
 		modulePrefix = (x > 0) ? fileName.substring(0, x)
 							   : fileName;
+		gen = new CodeGen(modulePrefix);
 	}
 	
 	private static final String VOID = "void";
@@ -93,59 +96,10 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 		return id;
 	}
 	
-	// Type mapping
-	
-	HashMap<Type,String> llvmTypeMap = new HashMap<Type,String>();
-	{
-		llvmTypeMap.put(Type.booleanType, "i1");
-		llvmTypeMap.put(Type.byteType, "i8");
-		llvmTypeMap.put(Type.charType, "i16");
-		llvmTypeMap.put(Type.doubleType, "double");
-		llvmTypeMap.put(Type.floatType, "float");
-		llvmTypeMap.put(Type.intType, "i32");
-		llvmTypeMap.put(Type.longType, "i64");
-		llvmTypeMap.put(Type.shortType, "i16");
-		llvmTypeMap.put(Type.stringType, "@string");
-		llvmTypeMap.put(Type.voidType, CodePass.VOID);
-		llvmTypeMap.put(Type.errorType, "error");
-	}
-	
-	private String llvmType(Type type) {
-		if (type instanceof ArrayType) {
-			return "[0 x "+llvmType(((ArrayType) type).getBase())+"]";
-		}
-		String t = llvmTypeMap.get(type);
-		if (t == null) return "error";
-		return t;
-	}
-	
-	// Operation mapping
-	
-	HashMap<String,String> llvmOpMap = new HashMap<String,String>();
-	{
-		llvmOpMap.put("++","add");
-		llvmOpMap.put("--","sub");
-		llvmOpMap.put("~","???");
-		llvmOpMap.put("!","???");
-		llvmOpMap.put("*","mul");
-		llvmOpMap.put("/","sdiv");
-		llvmOpMap.put("%","srem");
-		llvmOpMap.put("+","add");
-		llvmOpMap.put("-","sub");
-		llvmOpMap.put("==","icmp eq");
-		llvmOpMap.put("!=","icmp ne");
-		llvmOpMap.put("<","icmp slt");
-		llvmOpMap.put(">","icmp sgt");
-		llvmOpMap.put("<=","icmp sle");
-		llvmOpMap.put(">=","icmp sge");
-		llvmOpMap.put("&","and");
-		llvmOpMap.put("^","xor");
-		llvmOpMap.put("|","or");
-	}
 	
 	// Variable mapping
 	
-	HashMap<Symbol,CodeReg> symRef = new HashMap<Symbol,CodeReg>();
+	HashMap<Symbol,CodeSym> symRef = new HashMap<Symbol,CodeSym>();
 	
 	// Code output
 	
@@ -192,7 +146,7 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 	}
 
 	@Override
-	public CodeReg visitCompilationUnit(CompilationUnitContext ctx) {
+	public CodeSym visitCompilationUnit(CompilationUnitContext ctx) {
 //declare i32 @printf(i8 *, ...)
 	    // externalDeclaration+ EOF
 		// all fieldDeclarations first, then all methodDeclarations
@@ -225,7 +179,7 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 	}
 
 	@Override
-	public CodeReg visitMethodDeclaration(MethodDeclarationContext ctx) {
+	public CodeSym visitMethodDeclaration(MethodDeclarationContext ctx) {
         // returnType Identifier '(' formalParameterList? ')' dimensions block
         // don't need to visit returnType in this pass
         Type rtype = ctx.def.getType();
@@ -250,7 +204,7 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
         }
         emit(") {");
         refType.append(")");
-		CodeReg ref = CodeReg.makeRef(rtype,refType.toString(),fName);
+		CodeSym ref = CodeSym.makeRef(rtype,refType.toString(),fName);
         symRef.put(ctx.def, ref);
         if (fpl != null) {
 		    for (FormalParameterContext fp : fpl.formalParameter()) {
@@ -260,7 +214,7 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 				String argn = "%"+quoteName("a_"+vid);
 				String varn = "%"+quoteName("v_"+vid);
 				String argt = llvmType(fptype);
-		        ref = CodeReg.makeRef(fptype,argt,varn);
+		        ref = CodeSym.makeRef(fptype,argt,varn);
 		        symRef.put(vdi.def, ref);
 				emit("    ",varn," = alloca ",argt);
 		    	emit("    store ",argt," ",argn,", ",argt,"* ",varn);
@@ -278,7 +232,7 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
     }
 	
     @Override
-	public CodeReg visitFieldDeclaration(FieldDeclarationContext ctx) {
+	public CodeSym visitFieldDeclaration(FieldDeclarationContext ctx) {
     	// type variableDeclarators ';'
         // don't need to visit type in this pass
         VariableDeclaratorsContext d = ctx.variableDeclarators();
@@ -288,7 +242,7 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 			String vid = vdi.Identifier().getSymbol().getText();
 			String varn = "@"+quoteName("f_"+vid);
 			String vart = llvmType(vtype);
-	        CodeReg ref = CodeReg.makeRef(vtype,vart,varn);
+	        CodeSym ref = CodeSym.makeRef(vtype,vart,varn);
 	        symRef.put(vdi.def, ref);
 			emit("    ",varn," = global ",vart);
     		ExpressionContext init = v.expression();   // initializer
@@ -301,7 +255,7 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 	}   
     
 	@Override
-    public CodeReg visitLocalVariableDeclaration(LocalVariableDeclarationContext ctx) {
+    public CodeSym visitLocalVariableDeclaration(LocalVariableDeclarationContext ctx) {
         // type variableDeclarators ';'
         // don't need to visit type in this pass
         VariableDeclaratorsContext d = ctx.variableDeclarators();
@@ -311,7 +265,7 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 			String vid = vdi.Identifier().getSymbol().getText();
 			String varn = "%"+quoteName("v_"+vid);
 			String vart = llvmType(vtype);
-	        CodeReg ref = CodeReg.makeRef(vtype,vart,varn);
+	        CodeSym ref = CodeSym.makeRef(vtype,vart,varn);
 	        symRef.put(vdi.def, ref);
 			emit("    ",varn," = alloca ",vart);
     		ExpressionContext init = v.expression();   // initializer
@@ -324,7 +278,7 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
     }
     
 	@Override
-	public CodeReg visitCompoundStatement(CompoundStatementContext ctx) {
+	public CodeSym visitCompoundStatement(CompoundStatementContext ctx) {
     	// block
         BlockContext b = ctx.block();
 		visit(b);
@@ -332,11 +286,11 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
     }
     
 	@Override
-    public CodeReg visitIfStatement(IfStatementContext ctx) {
+    public CodeSym visitIfStatement(IfStatementContext ctx) {
     	// 'if' '(' expression ')' statement ('else' statement)?
     	String id = nextLabel();
     	ExpressionContext e = ctx.expression();
-		CodeReg cond = visit(e);
+		CodeSym cond = visit(e);
 		checkBoolean(cond,getChildToken(ctx,3));
     	emit("    br ",cond.typeAndName(),", label %true",id,", label %false",id);
     	Iterator<StatementContext> s = ctx.statement().iterator();
@@ -354,13 +308,13 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
     }
     
 	@Override
-    public CodeReg visitWhileStatement(WhileStatementContext ctx) {
+    public CodeSym visitWhileStatement(WhileStatementContext ctx) {
     	// 'while' '(' expression ')' statement
     	String id = nextLabel();
     	emit("    br label %loop",id," ; force basic block boundary");
     	emit("loop",id,":");
     	ExpressionContext e = ctx.expression();
-    	CodeReg cond = visit(e);
+    	CodeSym cond = visit(e);
 		checkBoolean(cond,getChildToken(ctx,3));
     	emit("    br ",cond.typeAndName(),", label %start",id,", label %end",id);
     	emit("start",id,":");
@@ -371,14 +325,14 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
     }
     
 	@Override
-    public CodeReg visitReturnStatement(ReturnStatementContext ctx) {
+    public CodeSym visitReturnStatement(ReturnStatementContext ctx) {
     	// 'return' expression? ';'
     	// Find enclosing method's return type
 		MethodDeclarationContext md = (MethodDeclarationContext)findAncestor(ctx, MethodDeclarationContext.class);
 		Type rt = md.def.getType();
         ExpressionContext e = ctx.expression();
         if (e != null) {
-        	CodeReg r = visit(e);
+        	CodeSym r = visit(e);
         	if (r.getType() != rt) {
         		// TODO coercion of return type
         		Main.error(e.start,"expected return type is "+rt);
@@ -403,13 +357,13 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 	}
     
 	@Override
-    public CodeReg visitNullStatement(MJ1Parser.NullStatementContext ctx) {
+    public CodeSym visitNullStatement(MJ1Parser.NullStatementContext ctx) {
     	// ';'
         return null;
     }
     
 	@Override
-    public CodeReg visitExpressionStatement(ExpressionStatementContext ctx) {
+    public CodeSym visitExpressionStatement(ExpressionStatementContext ctx) {
     	// expression ';'
         ExpressionContext e = ctx.expression();
 		visit(e);
@@ -417,10 +371,10 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
     }
     
 	@Override
-    public CodeReg visitPrimaryExpression(PrimaryExpressionContext ctx) {
+    public CodeSym visitPrimaryExpression(PrimaryExpressionContext ctx) {
     	// primary
         PrimaryContext p = ctx.primary();
-        CodeReg r = visit(p);
+        CodeSym r = visit(p);
         return r;
     }
     
@@ -434,12 +388,12 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
     	return Type.intType;
     }
     
-    private CodeReg widenNumericType(Type max, CodeReg r, Token op) {
+    private CodeSym widenNumericType(Type max, CodeSym r, Token op) {
     	if (max == Type.errorType || r.getType() == Type.errorType) return r;
     	if (r.isPointer()) r = doLoad(r);
     	if (r.getType() == max) return r;  // no widening if already required type
     	// LATER unboxing
-    	CodeReg p = new CodeReg(max,llvmType(max),false);
+    	CodeSym p = new CodeSym(max,llvmType(max),false);
     	if (   max == Type.doubleType
         	&& r.getType() == Type.floatType ) {
         	emit("    ",p.name," = fpext ",r.typeAndName()," to ",llvmType(max));
@@ -460,21 +414,21 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
     	return r;
     }
 
-	private CodeReg doLoad(CodeReg r) {
-		CodeReg l = new CodeReg(r.getType(),llvmType(r.getType()),false);
+	private CodeSym doLoad(CodeSym r) {
+		CodeSym l = new CodeSym(r.getType(),llvmType(r.getType()),false);
 		emit("    ",l.name," = load ",r.typeAndName());
 		return l;
 	}
 
 	@Override
-	public CodeReg visitIndexExpression(IndexExpressionContext ctx) {
+	public CodeSym visitIndexExpression(IndexExpressionContext ctx) {
 		// expression '[' expression ']'
     	List<ExpressionContext> list = ctx.expression();
 		Iterator<ExpressionContext> expit = list.iterator();
     	ExpressionContext expa = expit.next();
     	ExpressionContext expb = expit.next();
-    	CodeReg ra = visit(expa);
-    	CodeReg rb = visit(expb);
+    	CodeSym ra = visit(expa);
+    	CodeSym rb = visit(expb);
     	Token opToken = getChildToken(ctx,1);
     	if (!(ra.getType() instanceof ArrayType)) {
     		Main.error(opToken,"index on non-array type "+ra.getType());
@@ -482,17 +436,17 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
     	}
     	Type type = ((ArrayType)ra.getType()).getBase();
     	rb = widenNumericType(Type.intType, rb, opToken);
-    	CodeReg r = new CodeReg(type,llvmType(type),true);
+    	CodeSym r = new CodeSym(type,llvmType(type),true);
 		emit("    ",r.name," = getelementptr ",ra.typeAndName(),", ",rb.typeAndName());
 		return r;
 	}
 
 	@Override
-	public CodeReg visitCallExpression(CallExpressionContext ctx) {
+	public CodeSym visitCallExpression(CallExpressionContext ctx) {
 		// expression '(' expressionList? ')'
 		//TODO this is a mess! must be a better way. maybe treat a method as a type
 		ExpressionContext me = ctx.expression();
-		CodeReg meth = visit(me);
+		CodeSym meth = visit(me);
     	if (!(me instanceof PrimaryExpressionContext)) {
 			Main.error(me.stop,"is not a method");
 			return null;
@@ -509,19 +463,19 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 			return null;
     	}
     	MethodSymbol ms = (MethodSymbol)mi.def;
-        CodeReg m = symRef.get(mi.def);
+        CodeSym m = symRef.get(mi.def);
         assert m != null;
     	System.out.println("call target class "+me.getClass().getSimpleName()+" reg "+m);
     	
         Type type = ms.getType();
-		CodeReg r = new CodeReg(type, llvmType(type), false);
+		CodeSym r = new CodeSym(type, llvmType(type), false);
         ExpressionListContext el = ctx.expressionList();
 	    StringBuilder callArgs = new StringBuilder();
         if (el != null) {
-		    ArrayList<CodeReg> pl = new ArrayList<CodeReg>(el.getChildCount());
+		    ArrayList<CodeSym> pl = new ArrayList<CodeSym>(el.getChildCount());
 		    String sep = "";
 		    for (ExpressionContext e : el.expression()) {
-		    	CodeReg p = visit(e);
+		    	CodeSym p = visit(e);
 		    	// TODO check formal parameter type
 				pl.add(p);
 				callArgs.append(sep).append(p.typeAndName());
@@ -532,136 +486,134 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 	}
 
 	@Override
-	public CodeReg visitPrefixExpression(PrefixExpressionContext ctx) {
+	public CodeSym visitPrefixExpression(PrefixExpressionContext ctx) {
 		// ('+'|'-'/*|'++'|'--'*/) expression
 		// TODO Auto-generated method stub
 		return super.visitPrefixExpression(ctx);
 	}
 
 	@Override
-	public CodeReg visitNotExpression(NotExpressionContext ctx) {
+	public CodeSym visitNotExpression(NotExpressionContext ctx) {
 		// ('~'|'!') expression
 		// TODO Auto-generated method stub
 		return super.visitNotExpression(ctx);
 	}
 
-	private CodeReg binaryAithmeticOperation(ExpressionContext ctx, List<ExpressionContext> list, ParseTree opNode) {
+	private CodeSym binaryAithmeticOperation(ExpressionContext ctx, List<ExpressionContext> list, ParseTree opNode) {
 		Iterator<ExpressionContext> expit = list.iterator();
     	ExpressionContext expa = expit.next();
     	ExpressionContext expb = expit.next();
-    	CodeReg ra = visit(expa);
-    	CodeReg rb = visit(expb);
+    	CodeSym ra = visit(expa);
+    	CodeSym rb = visit(expb);
     	Token opToken = ((TerminalNode)opNode).getSymbol();
     	Type type = maxNumericType(ra.getType(),rb.getType());
     	ra = widenNumericType(type, ra, opToken);
     	rb = widenNumericType(type, rb, opToken);
-    	CodeReg r = new CodeReg(type, llvmType(type), false);
-		emit("    ",r.name," = ",llvmOpMap.get(opToken.getText())," ",ra.typeAndName(),", ",rb.name);
+    	CodeSym r = CodeSym.makeBinaryOperation(opToken.getText(), type, ra, rb);
+		r = gen.binaryOperation(type,)
 		return r;
 	}
     
 	@Override
-    public CodeReg visitMultiplyExpression(MultiplyExpressionContext ctx) {
+    public CodeSym visitMultiplyExpression(MultiplyExpressionContext ctx) {
     	// expression ('*'|'/'|'%') expression
     	return binaryAithmeticOperation(ctx, ctx.expression(), ctx.getChild(1));
     }
     
 	@Override
-    public CodeReg visitAddExpression(AddExpressionContext ctx) {
+    public CodeSym visitAddExpression(AddExpressionContext ctx) {
     	// expression ('+'|'-') expression
     	return binaryAithmeticOperation(ctx, ctx.expression(), ctx.getChild(1));
     }
     
 	@Override
-    public CodeReg visitCompareExpression(CompareExpressionContext ctx) {
+    public CodeSym visitCompareExpression(CompareExpressionContext ctx) {
     	// expression ('<=' | '>=' | '>' | '<') expression
     	List<ExpressionContext> list = ctx.expression();
 		Iterator<ExpressionContext> expit = list.iterator();
     	ExpressionContext expa = expit.next();
     	ExpressionContext expb = expit.next();
-    	CodeReg ra = visit(expa);
-    	CodeReg rb = visit(expb);
+    	CodeSym ra = visit(expa);
+    	CodeSym rb = visit(expb);
     	Token opToken = getChildToken(ctx,1);
     	Type type = maxNumericType(ra.getType(),rb.getType());
     	ra = widenNumericType(type, ra, opToken);
     	rb = widenNumericType(type, rb, opToken);
-    	CodeReg r = new CodeReg(Type.booleanType, llvmType(Type.booleanType), false);
-		emit("    ",r.name," = ",llvmOpMap.get(opToken.getText())," ",ra.typeAndName(),", ",rb.name);
+    	CodeSym r = CodeSym.makeCompareOperation(opToken.getText(), type, ra, rb);
 		return r;
     }
     
 	@Override
-    public CodeReg visitEqualExpression(EqualExpressionContext ctx) {
+    public CodeSym visitEqualExpression(EqualExpressionContext ctx) {
     	// expression ('==' | '!=') expression
     	List<ExpressionContext> list = ctx.expression();
 		Iterator<ExpressionContext> expit = list.iterator();
     	ExpressionContext expa = expit.next();
     	ExpressionContext expb = expit.next();
-    	CodeReg ra = visit(expa);
-    	CodeReg rb = visit(expb);
+    	CodeSym ra = visit(expa);
+    	CodeSym rb = visit(expb);
     	Token opToken = getChildToken(ctx,1);
     	// LATER reference comparison
     	Type type = maxNumericType(ra.getType(),rb.getType());
     	ra = widenNumericType(type, ra, opToken);
     	rb = widenNumericType(type, rb, opToken);
-    	CodeReg r = new CodeReg(Type.booleanType, llvmType(Type.booleanType), false);
-		emit("    ",r.name," = ",llvmOpMap.get(opToken.getText())," ",ra.typeAndName(),", ",rb.name);
+    	CodeSym r = CodeSym.makeCompareOperation(opToken.getText(), type, ra, rb);
 		return r;
     }
 
 	@Override
-    public CodeReg visitBitAndExpression(BitAndExpressionContext ctx) {
+    public CodeSym visitBitAndExpression(BitAndExpressionContext ctx) {
     	// expression '&' expression
     	return binaryAithmeticOperation(ctx, ctx.expression(), ctx.getChild(1));
     }
     
 	@Override
-    public CodeReg visitBitExclExpression(BitExclExpressionContext ctx) {
+    public CodeSym visitBitExclExpression(BitExclExpressionContext ctx) {
     	// expression '^' expression
     	return binaryAithmeticOperation(ctx, ctx.expression(), ctx.getChild(1));
     }
     
 	@Override
-    public CodeReg visitBitOrExpression(BitOrExpressionContext ctx) {
+    public CodeSym visitBitOrExpression(BitOrExpressionContext ctx) {
     	// expression '|' expression
     	return binaryAithmeticOperation(ctx, ctx.expression(), ctx.getChild(1));
     }
 
-	private void checkBoolean(CodeReg cond, Token token) {
+	private void checkBoolean(CodeSym cond, Token token) {
     	if (!(cond.getType() == Type.booleanType || cond.getType() == Type.errorType)) {
     		Main.error(token, "condition type must be boolean");
     	}
 	}
     
 	@Override
-    public CodeReg visitAndThenExpression(AndThenExpressionContext ctx) {
+    public CodeSym visitAndThenExpression(AndThenExpressionContext ctx) {
     	// expression '&&' expression
     	String id = nextLabel();
     	List<ExpressionContext> list = ctx.expression();
 		Iterator<ExpressionContext> expit = list.iterator();
     	ExpressionContext expa = expit.next();
     	ExpressionContext expb = expit.next();
-    	CodeReg ra = visit(expa);
+    	CodeSym ra = visit(expa);
 		checkBoolean(ra,expa.getStop());
     	emit("    br ",ra.typeAndName(),", label %true",id,", label %false",id);
     	emit("true",id,":");
-    	CodeReg rb = visit(expb);
+    	CodeSym rb = visit(expb);
 		checkBoolean(rb,expb.getStop());
 		emit("false",id,":");
-    	CodeReg r = new CodeReg(Type.booleanType, llvmType(Type.booleanType), false);
+    	CodeSym r = new CodeSym(Type.booleanType, llvmType(Type.booleanType), false);
 		emit("    ",r.name," = phi ",r.getRegType()," [ false, %",/*TODO*/"0"," ], [ ",rb.getName(),", %true",id," ]");
 		return r;
     }
     
 	@Override
-    public CodeReg visitOrElseExpression(OrElseExpressionContext ctx) {
+    public CodeSym visitOrElseExpression(OrElseExpressionContext ctx) {
     	// expression '||' expression
 		// TODO short-circuit
     	return null;
     }
         
 	@Override
-    public CodeReg visitAssignment(AssignmentContext ctx) {
+    public CodeSym visitAssignment(AssignmentContext ctx) {
 		// <assoc=right> expression
 		//      (   '='
 		//      )
@@ -669,8 +621,8 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 		Iterator<ExpressionContext> expit = ctx.expression().iterator();
     	ExpressionContext expa = expit.next();
     	ExpressionContext expb = expit.next();
-    	CodeReg ra = visit(expa);
-    	CodeReg rb = visit(expb);
+    	CodeSym ra = visit(expa);
+    	CodeSym rb = visit(expb);
     	Token opToken = getChildToken(ctx,1);
     	Type tipe = ra.getType();
     	System.out.println("assignment target class "+expa.getClass().getSimpleName()+" type "+tipe+" pointer "+ra.isPointer());
@@ -680,24 +632,24 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 	}
 
 	@Override
-	public CodeReg visitParenthesized(ParenthesizedContext ctx) {
+	public CodeSym visitParenthesized(ParenthesizedContext ctx) {
     	// '(' expression ')'
         ExpressionContext e = ctx.expression();
-        CodeReg r = visit(e);
+        CodeSym r = visit(e);
         return r;
     }
     
 	@Override
-    public CodeReg visitIdentifierPrimary(IdentifierPrimaryContext ctx) {
+    public CodeSym visitIdentifierPrimary(IdentifierPrimaryContext ctx) {
     	// Identifier
-    	CodeReg r;
+    	CodeSym r;
     	Token id = ctx.Identifier().getSymbol();
 		ctx.def = ctx.refScope.find(id);
     	if (ctx.def == null) {
     		Main.error(id," is not defined");
-        	r = new CodeReg(Type.errorType,llvmType(Type.errorType),false);
+        	r = new CodeSym(Type.errorType,llvmType(Type.errorType),false);
     	} else if (ctx.def.getType() == Type.errorType){
-        	r = new CodeReg(Type.errorType,llvmType(Type.errorType),false);
+        	r = new CodeSym(Type.errorType,llvmType(Type.errorType),false);
     	} else {
     		Scope defScope = ctx.def.getDefiningScope();
     		// if block scope, token index of definition must be before token
@@ -736,34 +688,58 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 	}
 
 	@Override
-	public CodeReg visitIntegerPrimary(MJ1Parser.IntegerPrimaryContext ctx) {
+	public CodeSym visitIntegerPrimary(MJ1Parser.IntegerPrimaryContext ctx) {
     	// IntegerLiteral
-    	String v = Integer.toString(Integer.decode(ctx.IntegerLiteral().getText()));
-    	CodeReg r = CodeReg.makeLiteral(Type.intType,llvmType(Type.intType),v);
+		String text = ctx.IntegerLiteral().getText();
+		int length = text.length();
+		char last = text.charAt(length-1);
+		CodeSym r;
+		if (last == 'l' || last == 'L') {
+			r = CodeSym.makeLiteral(Long.decode(text.substring(0,length-1)));
+		} else {
+			r = CodeSym.makeLiteral(Integer.decode(text));
+		}
         return r;
     }
     
 	@Override
-    public CodeReg visitFloatPrimary(MJ1Parser.FloatPrimaryContext ctx) {
+    public CodeSym visitFloatPrimary(MJ1Parser.FloatPrimaryContext ctx) {
     	// FloatingPointLiteral
-    	String v = Float.toString(Float.parseFloat(ctx.FloatingPointLiteral().getText()));
-    	CodeReg r = CodeReg.makeLiteral(Type.floatType,llvmType(Type.floatType),v);
+ 		String text = ctx.FloatingPointLiteral().getText();
+		int length = text.length();
+		char last = text.charAt(length-1);
+		CodeSym r;
+		if (last == 'f' || last == 'F') {
+			r = CodeSym.makeLiteral(Float.parseFloat(text.substring(0,length-1)));
+		} else if (last == 'd' || last == 'D') {
+			r = CodeSym.makeLiteral(Double.parseDouble(text.substring(0,length-1)));
+		} else {
+			r = CodeSym.makeLiteral(Float.parseFloat(text));
+		}
         return r;
     }
     
 	@Override
-    public CodeReg visitCharPrimary(MJ1Parser.CharPrimaryContext ctx) {
+    public CodeSym visitCharPrimary(MJ1Parser.CharPrimaryContext ctx) {
     	// CharacterLiteral
-    	String v = Integer.toString(Integer.decode(ctx.CharacterLiteral().getText()));
-    	CodeReg r = CodeReg.makeLiteral(Type.charType,llvmType(Type.charType),v);
+		String text = ctx.CharacterLiteral().getText();
+    	String c = decodeEscapes(text.substring(1, text.length()-1)/*strip quotes*/);
+		CodeSym r = CodeSym.makeLiteral(c.charAt(1));
         return r;
     }
     
 	@Override
-    public CodeReg visitStringPrimary(MJ1Parser.StringPrimaryContext ctx) {
+    public CodeSym visitStringPrimary(MJ1Parser.StringPrimaryContext ctx) {
     	// StringLiteral
-    	String s = ctx.StringLiteral().getText();
-    	StringBuilder t = new StringBuilder(s.substring(1, s.length()-1));  // strip quotes
+    	String text = ctx.StringLiteral().getText();
+    	String s = decodeEscapes(text.substring(1, text.length()-1)/*strip quotes*/);
+    	CodeSym r = new CodeSym(Type.stringType,llvmType(Type.stringType),true);
+    	emit("    ",r.name," = getelementptr ",stringType(s),"* ",stringID(s),", i32 0, i32 0");
+       return r;
+    }
+
+	private String decodeEscapes(String s) {
+		StringBuilder t = new StringBuilder(s);
     	for (int x = 0; x < t.length()-1; x += 1) {
     		if (t.charAt(x) == '\\') {
     			int y = x+1, e, d;
@@ -814,24 +790,21 @@ public class CodePass extends MJ1BaseVisitor<CodeReg> {
 				t.delete(x+1,y).setCharAt(x,c);
     		}
     	}
-    	String u = t.toString();
-    	CodeReg r = new CodeReg(Type.stringType,llvmType(Type.stringType),true);
-    	emit("    ",r.name," = getelementptr ",stringType(u),"* ",stringID(u),", i32 0, i32 0");
-       return r;
-    }
+    	return t.toString();
+	}
     
 	@Override
-    public CodeReg visitBooleanPrimary(MJ1Parser.BooleanPrimaryContext ctx) {
+    public CodeSym visitBooleanPrimary(MJ1Parser.BooleanPrimaryContext ctx) {
     	// BooleanLiteral
-    	String v = ctx.BooleanLiteral().getText().equals("true") ? "true" : "false";
-    	CodeReg r = CodeReg.makeLiteral(Type.booleanType,llvmType(Type.booleanType),v);
+    	String text = ctx.BooleanLiteral().getText();
+		CodeSym r = CodeSym.makeLiteral(text.equals("true"));
         return r;
     }
     
 	@Override
-    public CodeReg visitNullPrimary(MJ1Parser.NullPrimaryContext ctx) {
+    public CodeSym visitNullPrimary(MJ1Parser.NullPrimaryContext ctx) {
     	// 'null'
-    	CodeReg r = CodeReg.makeLiteral(Type.stringType,llvmType(Type.stringType),"null");
+    	CodeSym r = CodeSym.makeLiteral(Type.stringType,llvmType(Type.stringType),"null");
     	// TODO correct reference type
         return r;
     }
