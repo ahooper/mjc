@@ -3,7 +3,6 @@ package ca.nevdull.mjc1.compiler;
 import ca.nevdull.mjc1.compiler.MJ1Parser.BlockContext;
 import ca.nevdull.mjc1.compiler.MJ1Parser.BlockStatementContext;
 import ca.nevdull.mjc1.compiler.MJ1Parser.CompilationUnitContext;
-import ca.nevdull.mjc1.compiler.MJ1Parser.DimensionsContext;
 import ca.nevdull.mjc1.compiler.MJ1Parser.ExpressionContext;
 import ca.nevdull.mjc1.compiler.MJ1Parser.ExternalDeclarationContext;
 import ca.nevdull.mjc1.compiler.MJ1Parser.FieldDeclarationContext;

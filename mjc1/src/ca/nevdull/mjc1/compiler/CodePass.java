@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map.Entry;
 
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
@@ -63,54 +62,11 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
 							   : fileName;
 		gen = new CodeGen(modulePrefix);
 	}
-	
-	private static final String VOID = "void";
 
-	// Code sequence labels
-	
-	private int labelSequence = 0;
-	
-	private String nextLabel() {
-		return Integer.toHexString(++labelSequence);
-	}
-	
-	// String tables
-
-	private int stringIDSequence = 0;
-	HashMap<String,String> stringTable = new HashMap<String,String>();
-	
-	private String nextStringID() {
-		return "@s"+Integer.toHexString(++stringIDSequence);
-	}
-	
-	private String stringType(String s) {
-		return "["+s.length()+" x i16]";
-	}
-	
-	private String stringID(String s) {
-		String id = stringTable.get(s);
-		if (id == null) {
-			id = nextStringID();
-			stringTable.put(s,id);
-		}
-		return id;
-	}
-	
-	
 	// Variable mapping
 	
 	HashMap<Symbol,CodeSym> symRef = new HashMap<Symbol,CodeSym>();
 	
-	// Code output
-	
-	private void emit(String... args) {
-		emitn(args);
-		System.out.println();
-	}
-
-	private void emitn(String... args) {
-		for (String a : args) System.out.print(a);
-	}
 //def_globalarray(id, type, size, descr) ::= <<
 //; <descr>
 //@<id> = global [<size> x i32] zeroinitializer
@@ -160,74 +116,52 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
 		}
 		// If string table has to be positioned before code that uses it, the gathering
 		// will have to move to DefinitionPass.
-		emitStringTable();
+		gen.emitStringTable();
 		return null;
-	}
-
-	private void emitStringTable() {
-		for (Entry<String, String> entry : stringTable.entrySet()) {
-		    String s = entry.getKey();
-		    String id = entry.getValue();
-		    emitn(id," = internal constant ",stringType(s)," [");
-		    String sep = "";
-		    for (char c : s.toCharArray()) {
-		    	emitn(sep,"i16 ",Integer.toString(c));
-		    	sep = ",";
-		    }
-		    emit("]");
-		}
 	}
 
 	@Override
 	public CodeSym visitMethodDeclaration(MethodDeclarationContext ctx) {
         // returnType Identifier '(' formalParameterList? ')' dimensions block
         // don't need to visit returnType in this pass
+		String fname = ctx.Identifier().getText();
         Type rtype = ctx.def.getType();
-        String vmrt = llvmType(rtype);
-        if (vmrt == null) vmrt = CodePass.VOID;
-        StringBuffer refType = new StringBuffer(vmrt);
-        String fName = "@"+quoteName(ctx.Identifier().getText());
-        refType.append("(");
-        emitn("define ",vmrt," ",fName,"(");
+        if (rtype == null) rtype = Type.voidType;
         FormalParameterListContext fpl = ctx.formalParameterList();
+	    ArrayList<CodeSym> fps = new ArrayList<CodeSym>();
         if (fpl != null) {
-		    String sep = "";
 		    for (FormalParameterContext fp : fpl.formalParameter()) {
 		    	VariableDeclaratorIdContext vdi = fp.variableDeclaratorId();
-				String vid = vdi.Identifier().getSymbol().getText();
-				String argn = "%"+quoteName("a_"+vid);
-		        String argt = llvmType(fp.type().tipe);
-		    	emitn(sep,argt," ",argn);
-		    	refType.append(sep).append(argt);
-		    	sep = ",";
+				String pid = vdi.Identifier().getSymbol().getText();
+		        Type ptype = fp.type().tipe;
+				CodeSym p = gen.makeArgument(pid, ptype);
+		    	fps.add(p);
 		    }
         }
-        emit(") {");
-        refType.append(")");
-		CodeSym ref = CodeSym.makeRef(rtype,refType.toString(),fName);
-        symRef.put(ctx.def, ref);
+        CodeSym def = gen.beginFunction(fname, fps, rtype);
+        symRef.put(ctx.def, def);
+        // store argument values in stack fields
+        Iterator<CodeSym> fpit = fps.iterator();
         if (fpl != null) {
 		    for (FormalParameterContext fp : fpl.formalParameter()) {
 		        Type fptype = fp.type().tipe;
 		    	VariableDeclaratorIdContext vdi = fp.variableDeclaratorId();
 				String vid = vdi.Identifier().getSymbol().getText();
-				String argn = "%"+quoteName("a_"+vid);
-				String varn = "%"+quoteName("v_"+vid);
-				String argt = llvmType(fptype);
-		        ref = CodeSym.makeRef(fptype,argt,varn);
-		        symRef.put(vdi.def, ref);
-				emit("    ",varn," = alloca ",argt);
-		    	emit("    store ",argt," ",argn,", ",argt,"* ",varn);
+				CodeSym f = gen.emitStackField(vid, fptype);
+				symRef.put(vdi.def, f);
+		    	gen.emitStore(fpit.next(), f);
 		    }
         }
+        // method body
         BlockContext blk = ctx.block();
         visit(blk);
-        if (vmrt == CodePass.VOID ) {
-        	emit("    ret void");
+        // fall through return
+        if (rtype == Type.voidType ) {
+        	gen.emitReturn();
         } else {
-        	emit("    ret ",vmrt," 0");
+        	gen.emitReturn(gen.makeLiteral(0));  // TODO other return types
         }
-        emit("}");
+        gen.endFunction();
         return null;
     }
 	
@@ -240,11 +174,8 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     		VariableDeclaratorIdContext vdi = v.variableDeclaratorId();
 	        Type vtype = vdi.def.getType();
 			String vid = vdi.Identifier().getSymbol().getText();
-			String varn = "@"+quoteName("f_"+vid);
-			String vart = llvmType(vtype);
-	        CodeSym ref = CodeSym.makeRef(vtype,vart,varn);
-	        symRef.put(vdi.def, ref);
-			emit("    ",varn," = global ",vart);
+			CodeSym f = gen.emitGlobalField(vid, vtype);
+			symRef.put(vdi.def, f);
     		ExpressionContext init = v.expression();   // initializer
 			if (init != null) {
 				visit(init);
@@ -263,11 +194,8 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     		VariableDeclaratorIdContext vdi = v.variableDeclaratorId();
 	        Type vtype = vdi.def.getType();
 			String vid = vdi.Identifier().getSymbol().getText();
-			String varn = "%"+quoteName("v_"+vid);
-			String vart = llvmType(vtype);
-	        CodeSym ref = CodeSym.makeRef(vtype,vart,varn);
-	        symRef.put(vdi.def, ref);
-			emit("    ",varn," = alloca ",vart);
+			CodeSym f = gen.emitStackField(vid, vtype);
+			symRef.put(vdi.def, f);
     		ExpressionContext init = v.expression();   // initializer
 			if (init != null) {
 				visit(init);
@@ -288,21 +216,23 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
 	@Override
     public CodeSym visitIfStatement(IfStatementContext ctx) {
     	// 'if' '(' expression ')' statement ('else' statement)?
-    	String id = nextLabel();
     	ExpressionContext e = ctx.expression();
 		CodeSym cond = visit(e);
 		checkBoolean(cond,getChildToken(ctx,3));
-    	emit("    br ",cond.typeAndName(),", label %true",id,", label %false",id);
+		String tBlock = gen.nextBlock("t");
+		String fBlock = gen.nextBlock("f");
+		gen.emitBranch(cond, tBlock, fBlock);
     	Iterator<StatementContext> s = ctx.statement().iterator();
-    	emit("true",id,":");
+    	gen.beginBlock(tBlock);
     	visit(s.next());
     	if (s.hasNext()) {
-    		emit("    br label %end",id);
-        	emit("false",id,":");
+    		String eBlock = gen.nextBlock("e");
+    		gen.emitBranch(eBlock);
+        	gen.beginBlock(fBlock);
         	visit(s.next());
-        	emit("end",id,":");
+        	gen.beginBlock(eBlock);
     	} else {
-    		emit("false",id,":");
+        	gen.beginBlock(fBlock);
     	}
         return null;
     }
@@ -310,17 +240,19 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
 	@Override
     public CodeSym visitWhileStatement(WhileStatementContext ctx) {
     	// 'while' '(' expression ')' statement
-    	String id = nextLabel();
-    	emit("    br label %loop",id," ; force basic block boundary");
-    	emit("loop",id,":");
+    	String wBlock = gen.nextBlock("w");
+    	String tBlock = gen.nextBlock("t");
+    	String fBlock = gen.nextBlock("f");
+     	gen.emitBranch(wBlock);
+     	gen.beginBlock(wBlock);
     	ExpressionContext e = ctx.expression();
     	CodeSym cond = visit(e);
 		checkBoolean(cond,getChildToken(ctx,3));
-    	emit("    br ",cond.typeAndName(),", label %start",id,", label %end",id);
-    	emit("start",id,":");
+		gen.emitBranch(cond, tBlock, fBlock);
+    	gen.beginBlock(tBlock);
     	visit(ctx.statement());
-    	emit("    br label %loop",id);
-    	emit("end",id,":");
+    	gen.emitBranch(wBlock);
+    	gen.beginBlock(fBlock);
         return null;
     }
     
@@ -337,12 +269,12 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
         		// TODO coercion of return type
         		Main.error(e.start,"expected return type is "+rt);
         	}
-        	emit("    ret ",r.typeAndName());        	
+        	gen.emitReturn(r);
         } else {
-        	if (rt != null && rt != Type.voidType) {
+        	if (rt != null && rt != Type.voidType && rt != Type.errorType) {
         		Main.error(ctx.start,"expected return type is "+rt);
         	}
-        	emit("    ret void");        	
+        	gen.emitReturn();
         }
         return null;
     }
@@ -390,35 +322,28 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     
     private CodeSym widenNumericType(Type max, CodeSym r, Token op) {
     	if (max == Type.errorType || r.getType() == Type.errorType) return r;
-    	if (r.isPointer()) r = doLoad(r);
+    	if (r.isAddress()) r = gen.emitLoad(r);
     	if (r.getType() == max) return r;  // no widening if already required type
     	// LATER unboxing
-    	CodeSym p = new CodeSym(max,llvmType(max),false);
     	if (   max == Type.doubleType
         	&& r.getType() == Type.floatType ) {
-        	emit("    ",p.name," = fpext ",r.typeAndName()," to ",llvmType(max));
-        	return p;
+    		return gen.emitWidenFloat(max, r);
         }
     	if (   (max == Type.floatType || max == Type.doubleType)
     		&& (r.getType() == Type.intType || r.getType() == Type.longType
     		    || r.getType() == Type.shortType || r.getType() == Type.byteType) ) {
-    		emit("    ",p.name," = sitofp ",r.typeAndName()," to ",llvmType(max));
-    		return p;
+    		return gen.emitIntToFloat(max, r);
     	}
     	if (   (max == Type.intType || max == Type.longType)
         	&& r.getType() == Type.charType) {
-        	emit("    ",p.name," = zext ",r.typeAndName()," to ",llvmType(max));
-        	return p;
+    		return gen.emitWidenUnsigned(max, r);
+        }
+    	if (max == Type.intType || max == Type.longType) {
+    		return gen.emitWidenInt(max, r);
         }
     	Main.error(op,r.getType()+" operand cannot be widened to "+max);
     	return r;
     }
-
-	private CodeSym doLoad(CodeSym r) {
-		CodeSym l = new CodeSym(r.getType(),llvmType(r.getType()),false);
-		emit("    ",l.name," = load ",r.typeAndName());
-		return l;
-	}
 
 	@Override
 	public CodeSym visitIndexExpression(IndexExpressionContext ctx) {
@@ -434,11 +359,8 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     		Main.error(opToken,"index on non-array type "+ra.getType());
     		return null;
     	}
-    	Type type = ((ArrayType)ra.getType()).getBase();
     	rb = widenNumericType(Type.intType, rb, opToken);
-    	CodeSym r = new CodeSym(type,llvmType(type),true);
-		emit("    ",r.name," = getelementptr ",ra.typeAndName(),", ",rb.typeAndName());
-		return r;
+    	return gen.emitIndex(ra, rb);
 	}
 
 	@Override
@@ -466,23 +388,29 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
         CodeSym m = symRef.get(mi.def);
         assert m != null;
     	System.out.println("call target class "+me.getClass().getSimpleName()+" reg "+m);
+    	Iterator<Symbol> formals = ms.getParameters().iterator();
     	
         Type type = ms.getType();
-		CodeSym r = new CodeSym(type, llvmType(type), false);
         ExpressionListContext el = ctx.expressionList();
-	    StringBuilder callArgs = new StringBuilder();
+	    ArrayList<CodeSym> pl = new ArrayList<CodeSym>();
+	    ArrayList<Type> fptl = new ArrayList<Type>();
         if (el != null) {
-		    ArrayList<CodeSym> pl = new ArrayList<CodeSym>(el.getChildCount());
-		    String sep = "";
 		    for (ExpressionContext e : el.expression()) {
+		    	if (!formals.hasNext()) {
+		    		Main.error(e.getStart(),"excess parameters provided");
+		    		break;
+		    	}
+		    	Symbol f = formals.next();
+		    	fptl.add(f.getType());
 		    	CodeSym p = visit(e);
 		    	// TODO check formal parameter type
 				pl.add(p);
-				callArgs.append(sep).append(p.typeAndName());
 		    }
+	    	if (formals.hasNext()) {
+	    		Main.error(ctx.getStop(), "insufficient parameters");
+	    	}
         }
-        emit("    ",r.name," = call ",m.typeAndName(),"(",callArgs.toString(),")");
-        return r;
+        return gen.emitCall(m, type, pl);
 	}
 
 	@Override
@@ -496,6 +424,9 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
 	public CodeSym visitNotExpression(NotExpressionContext ctx) {
 		// ('~'|'!') expression
 		// TODO Auto-generated method stub
+		// ~x = x xor -1
+		// !x = x xor true
+		// -x = 0 - x
 		return super.visitNotExpression(ctx);
 	}
 
@@ -509,9 +440,7 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     	Type type = maxNumericType(ra.getType(),rb.getType());
     	ra = widenNumericType(type, ra, opToken);
     	rb = widenNumericType(type, rb, opToken);
-    	CodeSym r = CodeSym.makeBinaryOperation(opToken.getText(), type, ra, rb);
-		r = gen.binaryOperation(type,)
-		return r;
+		return gen.emitBinaryOperation(opToken.getText(), ra, rb);
 	}
     
 	@Override
@@ -539,8 +468,7 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     	Type type = maxNumericType(ra.getType(),rb.getType());
     	ra = widenNumericType(type, ra, opToken);
     	rb = widenNumericType(type, rb, opToken);
-    	CodeSym r = CodeSym.makeCompareOperation(opToken.getText(), type, ra, rb);
-		return r;
+		return gen.emitCompareOperation(opToken.getText(), ra, rb);
     }
     
 	@Override
@@ -557,8 +485,7 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     	Type type = maxNumericType(ra.getType(),rb.getType());
     	ra = widenNumericType(type, ra, opToken);
     	rb = widenNumericType(type, rb, opToken);
-    	CodeSym r = CodeSym.makeCompareOperation(opToken.getText(), type, ra, rb);
-		return r;
+		return gen.emitCompareOperation(opToken.getText(), ra, rb);
     }
 
 	@Override
@@ -588,28 +515,43 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
 	@Override
     public CodeSym visitAndThenExpression(AndThenExpressionContext ctx) {
     	// expression '&&' expression
-    	String id = nextLabel();
     	List<ExpressionContext> list = ctx.expression();
 		Iterator<ExpressionContext> expit = list.iterator();
     	ExpressionContext expa = expit.next();
     	ExpressionContext expb = expit.next();
     	CodeSym ra = visit(expa);
 		checkBoolean(ra,expa.getStop());
-    	emit("    br ",ra.typeAndName(),", label %true",id,", label %false",id);
-    	emit("true",id,":");
+		String cBlock = gen.getCurrentBlockName();
+		String aBlock = gen.nextBlock("a");
+		String eBlock = gen.nextBlock("e");
+		gen.emitBranch(ra, aBlock, eBlock);
+    	gen.beginBlock(aBlock);
     	CodeSym rb = visit(expb);
 		checkBoolean(rb,expb.getStop());
-		emit("false",id,":");
-    	CodeSym r = new CodeSym(Type.booleanType, llvmType(Type.booleanType), false);
-		emit("    ",r.name," = phi ",r.getRegType()," [ false, %",/*TODO*/"0"," ], [ ",rb.getName(),", %true",id," ]");
-		return r;
+   		gen.emitBranch(eBlock);
+       	gen.beginBlock(eBlock);
+       	return gen.emitJoin(gen.makeLiteral(false), cBlock, rb, aBlock);
     }
     
 	@Override
     public CodeSym visitOrElseExpression(OrElseExpressionContext ctx) {
     	// expression '||' expression
-		// TODO short-circuit
-    	return null;
+    	List<ExpressionContext> list = ctx.expression();
+		Iterator<ExpressionContext> expit = list.iterator();
+    	ExpressionContext expa = expit.next();
+    	ExpressionContext expb = expit.next();
+    	CodeSym ra = visit(expa);
+		checkBoolean(ra,expa.getStop());
+		String cBlock = gen.getCurrentBlockName();
+		String oBlock = gen.nextBlock("o");
+		String eBlock = gen.nextBlock("e");
+		gen.emitBranch(ra, eBlock, oBlock);
+    	gen.beginBlock(oBlock);
+    	CodeSym rb = visit(expb);
+		checkBoolean(rb,expb.getStop());
+   		gen.emitBranch(eBlock);
+       	gen.beginBlock(eBlock);
+       	return gen.emitJoin(gen.makeLiteral(true), cBlock, rb, oBlock);
     }
         
 	@Override
@@ -625,9 +567,10 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     	CodeSym rb = visit(expb);
     	Token opToken = getChildToken(ctx,1);
     	Type tipe = ra.getType();
-    	System.out.println("assignment target class "+expa.getClass().getSimpleName()+" type "+tipe+" pointer "+ra.isPointer());
+    	System.out.println("assignment target class "+expa.getClass().getSimpleName()+" type "+tipe+" address "+ra.isAddress());
     	rb = widenNumericType(tipe, rb, opToken);
-		emit("    store ",llvmType(tipe)," ",rb.getName(),", ",llvmType(tipe),"* ",ra.getName());
+    	// TODO other assignment conversions
+    	gen.emitStore(rb, ra);
 		return rb;
 	}
 
@@ -647,9 +590,9 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
 		ctx.def = ctx.refScope.find(id);
     	if (ctx.def == null) {
     		Main.error(id," is not defined");
-        	r = new CodeSym(Type.errorType,llvmType(Type.errorType),false);
+        	r = gen.makeError();
     	} else if (ctx.def.getType() == Type.errorType){
-        	r = new CodeSym(Type.errorType,llvmType(Type.errorType),false);
+        	r = gen.makeError();
     	} else {
     		Scope defScope = ctx.def.getDefiningScope();
     		// if block scope, token index of definition must be before token
@@ -665,27 +608,6 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     	}
         return r;
     }
-    
-    private String quoteName(String name) {
-    	int len = name.length();
-    	int x = 0;
-    	while (x < len) {
-    		char c = name.charAt(x);
-    		if (   (c >= 'a' && c <= 'z')
-    			|| (c >= 'A' && c <= 'Z')
-    			|| (c >= '0' && c <= '9' && x > 0)
-    			|| c == '-' || c == '$' || c == '.' || c == '_' ) {
-    		} else break;
-    		x++;
-    	}
-    	if (x == len) return name;  // no quotes needed
-    	StringBuilder quoted = new StringBuilder(name.length()+2);
-    	quoted.append('"');
-    	quoted.append(name);
-    	// should be no quotes or backslashes in a Java name to escape
-    	quoted.append('"');
-    	return quoted.toString();
-	}
 
 	@Override
 	public CodeSym visitIntegerPrimary(MJ1Parser.IntegerPrimaryContext ctx) {
@@ -693,13 +615,11 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
 		String text = ctx.IntegerLiteral().getText();
 		int length = text.length();
 		char last = text.charAt(length-1);
-		CodeSym r;
 		if (last == 'l' || last == 'L') {
-			r = CodeSym.makeLiteral(Long.decode(text.substring(0,length-1)));
+			return gen.makeLiteral(Long.decode(text.substring(0,length-1)));
 		} else {
-			r = CodeSym.makeLiteral(Integer.decode(text));
+			return gen.makeLiteral(Integer.decode(text));
 		}
-        return r;
     }
     
 	@Override
@@ -708,15 +628,13 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
  		String text = ctx.FloatingPointLiteral().getText();
 		int length = text.length();
 		char last = text.charAt(length-1);
-		CodeSym r;
 		if (last == 'f' || last == 'F') {
-			r = CodeSym.makeLiteral(Float.parseFloat(text.substring(0,length-1)));
+			return gen.makeLiteral(Float.parseFloat(text.substring(0,length-1)));
 		} else if (last == 'd' || last == 'D') {
-			r = CodeSym.makeLiteral(Double.parseDouble(text.substring(0,length-1)));
+			return gen.makeLiteral(Double.parseDouble(text.substring(0,length-1)));
 		} else {
-			r = CodeSym.makeLiteral(Float.parseFloat(text));
+			return gen.makeLiteral(Float.parseFloat(text));
 		}
-        return r;
     }
     
 	@Override
@@ -724,8 +642,7 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     	// CharacterLiteral
 		String text = ctx.CharacterLiteral().getText();
     	String c = decodeEscapes(text.substring(1, text.length()-1)/*strip quotes*/);
-		CodeSym r = CodeSym.makeLiteral(c.charAt(1));
-        return r;
+		return gen.makeLiteral(c.charAt(1));
     }
     
 	@Override
@@ -733,9 +650,9 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     	// StringLiteral
     	String text = ctx.StringLiteral().getText();
     	String s = decodeEscapes(text.substring(1, text.length()-1)/*strip quotes*/);
-    	CodeSym r = new CodeSym(Type.stringType,llvmType(Type.stringType),true);
-    	emit("    ",r.name," = getelementptr ",stringType(s),"* ",stringID(s),", i32 0, i32 0");
-       return r;
+    	CodeSym r = gen.makeString(s);
+    	// TODO create String object
+    	return r;
     }
 
 	private String decodeEscapes(String s) {
@@ -797,14 +714,13 @@ public class CodePass extends MJ1BaseVisitor<CodeSym> {
     public CodeSym visitBooleanPrimary(MJ1Parser.BooleanPrimaryContext ctx) {
     	// BooleanLiteral
     	String text = ctx.BooleanLiteral().getText();
-		CodeSym r = CodeSym.makeLiteral(text.equals("true"));
-        return r;
+		return gen.makeLiteral(text.equals("true"));
     }
     
 	@Override
     public CodeSym visitNullPrimary(MJ1Parser.NullPrimaryContext ctx) {
     	// 'null'
-    	CodeSym r = CodeSym.makeLiteral(Type.stringType,llvmType(Type.stringType),"null");
+    	CodeSym r = gen.makeNull(Type.stringType);
     	// TODO correct reference type
         return r;
     }

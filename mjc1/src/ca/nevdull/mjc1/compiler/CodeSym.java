@@ -2,49 +2,38 @@ package ca.nevdull.mjc1.compiler;
 
 public class CodeSym {
 	Type type;
-	ca.nevdull.mjc1.compiler.llvm.Operand operand;
-	boolean pointer;
+	String irType;
+	boolean address;
+	String irName;
 
 	public Type getType() {
 		return type;
 	}
 
-	public boolean isPointer() {
-		return pointer;
+	public String getIRType() {
+		return irType;
 	}
 
-	public CodeSym(Type type, ca.nevdull.mjc1.compiler.llvm.Operand operand, boolean pointer) {
+	public boolean isAddress() {
+		return address;
+	}
+
+	public String getIRName() {
+		return irName;
+	}
+
+	public CodeSym(Type type, String irType, String literal) {
 		this.type = type;
-		this.operand = operand;
-		this.pointer = pointer;
+		this.irType = irType;
+		this.address = false;
+		this.irName = literal;
+	}
+
+	public CodeSym(Type type, String irType, String irName, boolean address) {
+		this.type = type;
+		this.irType = irType;
+		this.address = address;
+		this.irName = irName;
 	}
 	
-/*
-	public static CodeSym makePointer(Type type, String regType, String name) {
-		CodeSym r = new CodeSym();
-		r.type = type;
-		r.regType = regType;
-		r.pointer = true;
-		r.name = name;
-		return r;
-	}
-
-	public String typeAndName() {
-		StringBuilder s = new StringBuilder();
-		s.append(regType);
-		if (pointer) s.append("*");
-		s.append(" ");
-		s.append(name);
-		return s.toString();
-	}
-
-	public static CodeSym makeRef(Type type, String regType, String name) {
-		CodeSym r = new CodeSym();
-		r.type = type;
-		r.regType = regType;
-		r.pointer = true;
-		r.name = name;
-		return r;
-	}
-*/
 }
